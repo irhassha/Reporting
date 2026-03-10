@@ -6,7 +6,6 @@
   --muted: #c5d4ea;
   --line: rgb(255 255 255 / 20%);
   --glass: rgb(255 255 255 / 11%);
-  --glass-strong: rgb(255 255 255 / 15%);
   --accent: #59c4ff;
   --accent-deep: #2f9ee2;
 }
@@ -24,11 +23,7 @@ body {
     linear-gradient(135deg, var(--bg1), var(--bg2) 46%, var(--bg3));
 }
 
-.app-shell {
-  max-width: 1320px;
-  margin: 2rem auto;
-  padding: 0 1rem 2rem;
-}
+.app-shell { max-width: 1320px; margin: 2rem auto; padding: 0 1rem 2rem; }
 
 .glass-panel {
   background: var(--glass);
@@ -49,7 +44,6 @@ body {
 header { padding: 1rem 1.1rem; margin-bottom: 1rem; }
 header h1 { margin: 0 0 0.2rem; }
 header p { margin: 0; color: var(--muted); }
-
 .card { padding: 1rem; margin-bottom: 1rem; }
 
 .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
@@ -81,11 +75,7 @@ button[disabled] { cursor: not-allowed; opacity: 0.45; }
 
 .table-wrap { overflow-x: auto; }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 1200px;
-}
+table { width: 100%; border-collapse: collapse; min-width: 1200px; }
 
 th, td {
   border-bottom: 1px solid rgb(255 255 255 / 18%);
@@ -95,13 +85,7 @@ th, td {
   font-size: 0.88rem;
 }
 
-thead th {
-  background: rgb(0 0 0 / 28%);
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-
+thead th { background: rgb(0 0 0 / 28%); position: sticky; top: 0; z-index: 2; }
 .empty { text-align: center; color: var(--muted); padding: 1.2rem; }
 
 .remark-cell { min-width: 370px; display: flex; flex-direction: column; gap: 0.5rem; }
@@ -113,6 +97,7 @@ thead th {
   grid-template-columns: 1fr auto;
   gap: 0.4rem;
   padding: 0.45rem;
+  align-items: start;
 }
 
 .remark-select, .remark-extra {
@@ -124,13 +109,18 @@ thead th {
   color: var(--text);
 }
 
-.remark-output {
-  grid-column: 1 / -1;
-  border-radius: 8px;
-  padding: 0.35rem;
-  min-height: 1.85rem;
-  white-space: pre-wrap;
-  background: rgb(89 196 255 / 15%);
+.remark-view {
+  width: 100%;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  background: rgb(89 196 255 / 22%);
+  border: 1px solid rgb(89 196 255 / 45%);
+  font-size: 0.82rem;
+}
+
+.remark-inline-actions {
+  display: flex;
+  gap: 0.25rem;
 }
 
 .icon-btn, .mini-btn {
@@ -143,7 +133,16 @@ thead th {
   padding: 0;
 }
 
-.mini-btn { border-radius: 8px; min-width: 32px; height: 32px; }
+.mini-btn { border-radius: 8px; min-width: 32px; height: 32px; font-size: 0.75rem; padding: 0 0.35rem; }
+
+.log-chip {
+  border-radius: 10px;
+  padding: 0.4rem 0.5rem;
+  background: rgb(89 196 255 / 16%);
+  border: 1px solid rgb(89 196 255 / 40%);
+  white-space: pre-wrap;
+  font-size: 0.82rem;
+}
 
 #berthCanvas {
   margin-top: 0.6rem;
@@ -178,4 +177,4 @@ thead th {
 }
 
 .end { justify-content: flex-end; margin-top: 0.8rem; }
-.hidden { display: none; }
+.hidden { display: none !important; }

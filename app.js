@@ -1,4 +1,5 @@
 const excelInput = document.getElementById('excelInput');
+const copyTableBtn = document.getElementById('copyTableBtn');
 const exportExcelBtn = document.getElementById('exportExcelBtn');
 const tableBody = document.getElementById('tableBody');
 const remarkBlockTemplate = document.getElementById('remarkBlockTemplate');
@@ -46,6 +47,7 @@ const columnAliasMap = {
 };
 
 excelInput.addEventListener('change', handleExcelUpload);
+copyTableBtn.addEventListener('click', copyTableToExcel);
 exportExcelBtn.addEventListener('click', exportFilteredData);
 closeModalBtn.addEventListener('click', closeModal);
 modalBackdrop.addEventListener('click', (event) => {
@@ -76,10 +78,17 @@ function toDisplayText(value) {
   return String(value);
 }
 
+function formatVR(rawValue) {
+  const num = Number(String(rawValue).replace(/,/g, '.'));
+  if (Number.isFinite(num)) return num.toFixed(1);
+  return toDisplayText(rawValue);
+}
+
 function createRowFromSource(sourceRow) {
   const row = {};
   DISPLAY_COLUMNS.forEach((col) => {
-    row[col] = toDisplayText(findValueByAlias(sourceRow, columnAliasMap[col] || [col]));
+    const raw = findValueByAlias(sourceRow, columnAliasMap[col] || [col]);
+    row[col] = col === 'Vessel Rate (VR)' ? formatVR(raw) : toDisplayText(raw);
   });
   row.remarkBlocks = [];
   return row;
@@ -105,7 +114,9 @@ async function handleExcelUpload(event) {
   rawRows.filter(operatorAllowed).forEach((src) => resultRows.push(createRowFromSource(src)));
 
   renderTable();
-  exportExcelBtn.disabled = resultRows.length === 0;
+  const enabled = resultRows.length > 0;
+  exportExcelBtn.disabled = !enabled;
+  copyTableBtn.disabled = !enabled;
 }
 
 function renderTable() {
@@ -130,6 +141,16 @@ function renderTable() {
   });
 }
 
+function isDynamicRemark(value) {
+  return ['QC Trouble Spreader', 'DOOG Units', 'LOOG Units', 'D/L OOG Units'].includes(value);
+}
+
+function blockIsComplete(block) {
+  if (!block?.value) return false;
+  if (!isDynamicRemark(block.value)) return true;
+  return /\d+/.test(String(block.extra || ''));
+}
+
 function buildRemarkCell(rowIndex) {
   const row = resultRows[rowIndex];
   const wrapper = document.createElement('div');
@@ -142,9 +163,14 @@ function buildRemarkCell(rowIndex) {
     if (block.kind === 'log') {
       const logBlock = document.createElement('div');
       logBlock.className = 'remark-block glass-subpanel';
-      const output = document.createElement('div');
-      output.className = 'remark-output';
-      output.textContent = block.text;
+
+      const logChip = document.createElement('div');
+      logChip.className = 'log-chip';
+      logChip.textContent = block.text;
+
+      const actionWrap = document.createElement('div');
+      actionWrap.className = 'remark-inline-actions';
+
       const removeBtn = document.createElement('button');
       removeBtn.className = 'mini-btn';
       removeBtn.type = 'button';
@@ -154,21 +180,24 @@ function buildRemarkCell(rowIndex) {
         row.remarkBlocks.splice(blockIndex, 1);
         renderTable();
       });
-      logBlock.appendChild(removeBtn);
-      logBlock.appendChild(output);
-      output.style.gridColumn = '1 / -1';
+
+      actionWrap.appendChild(removeBtn);
+      logBlock.appendChild(logChip);
+      logBlock.appendChild(actionWrap);
       list.appendChild(logBlock);
       return;
     }
 
     const blockNode = remarkBlockTemplate.content.cloneNode(true);
+    const root = blockNode.querySelector('.remark-block');
     const select = blockNode.querySelector('.remark-select');
     const extraInput = blockNode.querySelector('.remark-extra');
+    const viewChip = blockNode.querySelector('.remark-view');
+    const editBtn = blockNode.querySelector('.edit-remark-btn');
+    const resetBtn = blockNode.querySelector('.reset-remark-btn');
     const removeBtn = blockNode.querySelector('.remove-remark-btn');
-    const output = blockNode.querySelector('.remark-output');
 
     select.value = block.value || '';
-    output.textContent = formatPresetBlock(block);
 
     const dynamicMap = {
       'QC Trouble Spreader': 'QC [801-808] Trouble Spreader',
@@ -177,28 +206,57 @@ function buildRemarkCell(rowIndex) {
       'D/L OOG Units': 'D/L OOG [number] Units'
     };
 
-    if (dynamicMap[select.value]) {
-      extraInput.classList.remove('hidden');
-      extraInput.placeholder = dynamicMap[select.value];
-      extraInput.value = block.extra || '';
-    }
+    const syncViewMode = () => {
+      const complete = blockIsComplete(block);
+      if (complete && block.editing !== true) {
+        select.classList.add('hidden');
+        extraInput.classList.add('hidden');
+        viewChip.classList.remove('hidden');
+        viewChip.textContent = formatPresetBlock(block);
+        editBtn.classList.remove('hidden');
+        resetBtn.classList.remove('hidden');
+      } else {
+        select.classList.remove('hidden');
+        const showExtra = dynamicMap[select.value];
+        if (showExtra) {
+          extraInput.classList.remove('hidden');
+          extraInput.placeholder = dynamicMap[select.value];
+          extraInput.value = block.extra || '';
+        } else {
+          extraInput.classList.add('hidden');
+          extraInput.value = '';
+          block.extra = '';
+        }
+        viewChip.classList.add('hidden');
+        editBtn.classList.add('hidden');
+        resetBtn.classList.add('hidden');
+      }
+    };
 
     select.addEventListener('change', () => {
       block.value = select.value;
-      if (dynamicMap[select.value]) {
-        extraInput.classList.remove('hidden');
-        extraInput.placeholder = dynamicMap[select.value];
-      } else {
-        extraInput.classList.add('hidden');
-        extraInput.value = '';
-        block.extra = '';
-      }
-      output.textContent = formatPresetBlock(block);
+      if (!isDynamicRemark(block.value) && block.value) block.editing = false;
+      syncViewMode();
     });
 
     extraInput.addEventListener('input', () => {
       block.extra = extraInput.value;
-      output.textContent = formatPresetBlock(block);
+      if (blockIsComplete(block)) {
+        block.editing = false;
+      }
+      syncViewMode();
+    });
+
+    editBtn.addEventListener('click', () => {
+      block.editing = true;
+      syncViewMode();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      block.value = '';
+      block.extra = '';
+      block.editing = true;
+      syncViewMode();
     });
 
     removeBtn.addEventListener('click', () => {
@@ -206,6 +264,8 @@ function buildRemarkCell(rowIndex) {
       renderTable();
     });
 
+    root.dataset.index = String(blockIndex);
+    syncViewMode();
     list.appendChild(blockNode);
   });
 
@@ -217,7 +277,7 @@ function buildRemarkCell(rowIndex) {
   addRemarkBtn.textContent = '(+) Add Remark';
   addRemarkBtn.className = 'mini-btn';
   addRemarkBtn.addEventListener('click', () => {
-    row.remarkBlocks.push({ kind: 'preset', value: '', extra: '' });
+    row.remarkBlocks.push({ kind: 'preset', value: '', extra: '', editing: true });
     renderTable();
   });
 
@@ -269,9 +329,21 @@ function applyLogParse() {
 }
 
 function parseOperationalLog(text) {
-  const gangWayTime = extractTime(text, /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Gang\s*Way\s*Down/i, /Gang\s*Way\s*Down[^\n]*(\d{1,2}:\d{2})/i);
-  const quarantineTime = extractTime(text, /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Quarantine\s*Clearance/i, /Quarantine\s*Clearance[^\n]*(\d{1,2}:\d{2})/i);
-  const commenceTime = extractTime(text, /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Commence(?:\s+Loading|\s+Discharge|\b)/i, /Commence(?:\s+Loading|\s+Discharge|\b)[^\n]*(\d{1,2}:\d{2})/i);
+  const gangWayTime = extractTime(
+    text,
+    /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Gang\s*Way\s*Down/i,
+    /Gang\s*Way\s*Down[^\n]*(\d{1,2}:\d{2})/i
+  );
+  const quarantineTime = extractTime(
+    text,
+    /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Quarantine\s*Clearance/i,
+    /Quarantine\s*Clearance[^\n]*(\d{1,2}:\d{2})/i
+  );
+  const commenceTime = extractTime(
+    text,
+    /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Commence(?:\s+Loading|\s+Discharge|\b)/i,
+    /Commence(?:\s+Loading|\s+Discharge|\b)[^\n]*(\d{1,2}:\d{2})/i
+  );
 
   const gw = gangWayTime || 'N/A';
   const qt = quarantineTime || 'N/A';
@@ -330,18 +402,48 @@ function detectMealBreaks(gangWayTime, commenceTime) {
     .map((w) => w.label);
 }
 
-function exportFilteredData() {
-  const exportData = resultRows.map((row) => {
-    const joinedRemarks = row.remarkBlocks
-      .map((block) => (block.kind === 'log' ? block.text : formatPresetBlock(block)))
-      .filter(Boolean)
-      .join('\n');
+function getJoinedRemarks(row) {
+  return row.remarkBlocks
+    .map((block) => (block.kind === 'log' ? block.text : formatPresetBlock(block)))
+    .filter(Boolean)
+    .join('\n');
+}
 
-    return {
-      ...Object.fromEntries(DISPLAY_COLUMNS.map((c) => [c, row[c] || ''])),
-      Remark: joinedRemarks
-    };
+async function copyTableToExcel() {
+  const table = document.getElementById('resultTable');
+  if (!table || !resultRows.length) return;
+
+  const headers = [...DISPLAY_COLUMNS, 'Remark'];
+  const lines = [headers.join('\t')];
+  resultRows.forEach((row) => {
+    const rowValues = DISPLAY_COLUMNS.map((col) => sanitizeTSV(row[col] || ''));
+    rowValues.push(sanitizeTSV(getJoinedRemarks(row)));
+    lines.push(rowValues.join('\t'));
   });
+
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'));
+    copyTableBtn.textContent = '✅ Copied';
+    setTimeout(() => {
+      copyTableBtn.textContent = '📋 Copy Table';
+    }, 1200);
+  } catch {
+    copyTableBtn.textContent = '⚠️ Clipboard blocked';
+    setTimeout(() => {
+      copyTableBtn.textContent = '📋 Copy Table';
+    }, 1500);
+  }
+}
+
+function sanitizeTSV(value) {
+  return String(value).replace(/\t/g, ' ').replace(/\r/g, '');
+}
+
+function exportFilteredData() {
+  const exportData = resultRows.map((row) => ({
+    ...Object.fromEntries(DISPLAY_COLUMNS.map((c) => [c, row[c] || ''])),
+    Remark: getJoinedRemarks(row)
+  }));
 
   const ws = XLSX.utils.json_to_sheet(exportData);
   const wb = XLSX.utils.book_new();
@@ -376,12 +478,12 @@ function processBerthImage() {
   const width = berthCanvas.width;
   const height = berthCanvas.height;
   const leftKeepWidth = Math.max(Math.round(width * 0.12), 110);
+  const sourceData = ctx.getImageData(0, 0, width, height);
+  const data = sourceData.data;
 
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
   const target = { r: 145, g: 230, b: 245 };
   const tolerance = 78;
-  const mask = new Uint8Array(width * height);
+  const targetMask = new Uint8Array(width * height);
 
   for (let y = 0; y < height; y++) {
     for (let x = leftKeepWidth; x < width; x++) {
@@ -394,17 +496,18 @@ function processBerthImage() {
       if (a === 0) continue;
 
       const dist = Math.sqrt((r - target.r) ** 2 + (g - target.g) ** 2 + (b - target.b) ** 2);
-      if (dist > tolerance && isLikelyColored(r, g, b)) mask[idx] = 1;
+      if (dist <= tolerance) targetMask[idx] = 1;
     }
   }
 
-  const visited = new Uint8Array(width * height);
-  const components = [];
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(leftKeepWidth, 0, width - leftKeepWidth, height);
 
+  const visited = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
     for (let x = leftKeepWidth; x < width; x++) {
       const seed = y * width + x;
-      if (!mask[seed] || visited[seed]) continue;
+      if (!targetMask[seed] || visited[seed]) continue;
 
       const queue = [seed];
       visited[seed] = 1;
@@ -432,34 +535,22 @@ function processBerthImage() {
           const nx = n % width;
           const ny = Math.floor(n / width);
           if (nx < leftKeepWidth || ny < 0 || ny >= height) return;
-          if (!mask[n] || visited[n]) return;
+          if (!targetMask[n] || visited[n]) return;
           visited[n] = 1;
           queue.push(n);
         });
       }
 
+      if (count < 60) continue;
       const boxW = maxX - minX + 1;
       const boxH = maxY - minY + 1;
-      if (count >= 60 && boxW >= 8 && boxH >= 8) {
-        components.push({ x: minX, y: minY, w: boxW, h: boxH });
-      }
+      if (boxW < 8 || boxH < 8) continue;
+
+      ctx.putImageData(sourceData, 0, 0, minX, minY, boxW, boxH);
     }
   }
 
-  ctx.fillStyle = '#cccccc';
-  components.forEach((box) => {
-    const safeX = Math.max(box.x, leftKeepWidth);
-    const safeW = box.w - (safeX - box.x);
-    if (safeW > 0) ctx.fillRect(safeX, box.y, safeW, box.h);
-  });
-
   downloadImageBtn.disabled = false;
-}
-
-function isLikelyColored(r, g, b) {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  return max - min > 22;
 }
 
 function downloadCanvasImage() {

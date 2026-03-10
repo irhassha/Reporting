@@ -27,6 +27,7 @@
             <span>Upload .xlsx</span>
             <input id="excelInput" type="file" accept=".xlsx,.xls" />
           </label>
+          <button id="copyTableBtn" type="button" disabled>📋 Copy Table</button>
           <button id="exportExcelBtn" type="button" disabled>Export to Excel</button>
         </div>
 
@@ -102,8 +103,12 @@
           <option value="D/L OOG Units">D/L OOG [number] Units</option>
         </select>
         <input class="remark-extra hidden" type="text" placeholder="Extra input" />
-        <button class="mini-btn remove-remark-btn" type="button" title="Remove remark">✕</button>
-        <div class="remark-output"></div>
+        <div class="remark-view hidden"></div>
+        <div class="remark-inline-actions">
+          <button class="mini-btn edit-remark-btn hidden" type="button" title="Edit">Edit</button>
+          <button class="mini-btn reset-remark-btn hidden" type="button" title="Reset">✕</button>
+          <button class="mini-btn remove-remark-btn" type="button" title="Remove remark">🗑</button>
+        </div>
       </div>
     </template>
 

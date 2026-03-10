@@ -3,6 +3,9 @@ const copyTableBtn = document.getElementById('copyTableBtn');
 const exportExcelBtn = document.getElementById('exportExcelBtn');
 const tableBody = document.getElementById('tableBody');
 const remarkBlockTemplate = document.getElementById('remarkBlockTemplate');
+const dateRangePicker = document.getElementById('dateRangePicker');
+const dateRangeReset = document.getElementById('dateRangeReset');
+const dateRangeStatus = document.getElementById('dateRangeStatus');
 
 const modalBackdrop = document.getElementById('modalBackdrop');
 const closeModalBtn = document.getElementById('closeModalBtn');
@@ -17,13 +20,46 @@ const ctx = berthCanvas.getContext('2d');
 const filterOpacityInput = document.getElementById('filterOpacity');
 const filterOpacityValue = document.getElementById('filterOpacityValue');
 
+const metricSelect = document.getElementById('metricSelect');
+const groupBySelect = document.getElementById('groupBySelect');
+const serviceFilterList = document.getElementById('serviceFilterList');
+const performanceChartCanvas = document.getElementById('performanceChart');
+const averageChartCanvas = document.getElementById('averageChart');
+
 const resultRows = [];
+const analyticsRows = [];
 let activeRemarkRowIndex = null;
 let loadedImage = null;
+let performanceChart = null;
+let averageChart = null;
+let selectedCalendarDates = [];
+let dateRangeStart = null;
+let dateRangeEnd = null;
 
 const DISPLAY_COLUMNS = [
   'Vessel Name', 'Service', 'ATB', 'ATD', 'Total (Boxes)', 'Total Teus', 'Crane Intencity (CI)', 'Vessel Rate (VR)', 'ATB to Fst lift', 'Lst lift to ATD'
 ];
+
+const MASTER_WINDOW_SCHEDULE = {
+  'JPI-A': { day: 0, time: '23:00' },
+  IN1: { day: 0, time: '13:00' },
+  SEAGULL: { day: 0, time: '18:00' },
+  KCI: { day: 1, time: '22:00' },
+  CMI: { day: 2, time: '00:01' },
+  CMI2: { day: 2, time: '00:01' },
+  IA8: { day: 3, time: '13:00' },
+  CIM: { day: 3, time: '12:00' },
+  IA15: { day: 4, time: '09:00' },
+  JKF: { day: 4, time: '18:00' },
+  JTH: { day: 5, time: '13:00' },
+  SE8: { day: 5, time: '13:00' },
+  'JPI-B': { day: 6, time: '08:00' },
+  KIS: { day: 6, time: '16:00' },
+  CIT: { day: 0, time: '01:00' },
+  IA1: { day: 6, time: '23:00' }
+};
+
+const MONTH_ORDER = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const columnAliasMap = {
   'Vessel Name': ['Vessel Name', 'Vessel', 'VesselName'],
@@ -53,6 +89,10 @@ downloadImageBtn.addEventListener('click', downloadCanvasImage);
 filterOpacityInput.addEventListener('input', () => {
   filterOpacityValue.textContent = `${Math.round(Number(filterOpacityInput.value) * 100)}%`;
 });
+metricSelect?.addEventListener('change', renderAnalyticsCharts);
+groupBySelect?.addEventListener('change', renderAnalyticsCharts);
+dateRangePicker?.addEventListener('change', onCalendarDatePicked);
+dateRangeReset?.addEventListener('click', resetDateRangeFilter);
 
 function normalizeHeader(header) {
   return String(header || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -85,6 +125,11 @@ function createRowFromSource(sourceRow) {
     const raw = findValueByAlias(sourceRow, columnAliasMap[col] || [col]);
     row[col] = col === 'Vessel Rate (VR)' ? formatVR(raw) : toDisplayText(raw);
   });
+  row.Operator = toDisplayText(findValueByAlias(sourceRow, columnAliasMap.Operator || ['Operator']));
+  row['Window Status'] = toDisplayText(sourceRow['Window Status'] || sourceRow.Window || sourceRow['VS Window'] || '');
+  row['BOA Status'] = toDisplayText(sourceRow['BOA Status'] || sourceRow.BOA || '');
+  row['MM-YY'] = toDisplayText(sourceRow['MM-YY'] || sourceRow.MMYY || sourceRow.Month || '');
+  row._filterDate = extractRowFilterDate(sourceRow);
   row.remarkBlocks = [];
   return row;
 }
@@ -92,6 +137,62 @@ function createRowFromSource(sourceRow) {
 function operatorAllowed(sourceRow) {
   const op = toDisplayText(findValueByAlias(sourceRow, columnAliasMap.Operator || ['Operator'])).trim().toUpperCase();
   return op === 'MCC' || op === 'MAE';
+}
+
+function toISODateOnly(dateObj) {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return '';
+  return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+}
+
+function extractRowFilterDate(sourceRow) {
+  const atbRaw = findValueByAlias(sourceRow, columnAliasMap.ATB || ['ATB']);
+  const atdRaw = findValueByAlias(sourceRow, columnAliasMap.ATD || ['ATD']);
+  const atb = toDateValue(atbRaw);
+  const atd = toDateValue(atdRaw);
+  return toISODateOnly(atb || atd);
+}
+
+function onCalendarDatePicked(event) {
+  const picked = String(event.target.value || '');
+  if (!picked) return;
+
+  selectedCalendarDates.push(picked);
+  if (selectedCalendarDates.length > 2) selectedCalendarDates = [picked];
+
+  if (selectedCalendarDates.length === 1) {
+    dateRangeStart = picked;
+    dateRangeEnd = null;
+    if (dateRangeStatus) dateRangeStatus.textContent = `Tanggal awal: ${picked}. Pilih tanggal kedua.`;
+  } else {
+    const [a, b] = selectedCalendarDates;
+    dateRangeStart = a <= b ? a : b;
+    dateRangeEnd = a <= b ? b : a;
+    if (dateRangeStatus) dateRangeStatus.textContent = `Range: ${dateRangeStart} s/d ${dateRangeEnd}`;
+  }
+
+  renderTable();
+}
+
+function resetDateRangeFilter() {
+  selectedCalendarDates = [];
+  dateRangeStart = null;
+  dateRangeEnd = null;
+  if (dateRangePicker) dateRangePicker.value = '';
+  if (dateRangeStatus) dateRangeStatus.textContent = 'Semua tanggal';
+  renderTable();
+}
+
+function rowPassesDateRange(row) {
+  if (!dateRangeStart) return true;
+  if (!row?._filterDate) return false;
+  if (!dateRangeEnd) return row._filterDate === dateRangeStart;
+  return row._filterDate >= dateRangeStart && row._filterDate <= dateRangeEnd;
+}
+
+function getFilteredRowsWithIndex() {
+  return resultRows
+    .map((row, rowIndex) => ({ row, rowIndex }))
+    .filter(({ row }) => rowPassesDateRange(row));
 }
 
 async function handleExcelUpload(event) {
@@ -103,10 +204,18 @@ async function handleExcelUpload(event) {
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
   const rawRows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
 
-  resultRows.length = 0;
-  rawRows.filter(operatorAllowed).forEach((src) => resultRows.push(createRowFromSource(src)));
+  const enrichedRows = enrichOperationalMetrics(rawRows);
 
-  renderTable();
+  resultRows.length = 0;
+  analyticsRows.length = 0;
+  enrichedRows.filter(operatorAllowed).forEach((src) => {
+    resultRows.push(createRowFromSource(src));
+    analyticsRows.push(src);
+  });
+
+  resetDateRangeFilter();
+  renderServiceFilters();
+  renderAnalyticsCharts();
   const ready = resultRows.length > 0;
   copyTableBtn.disabled = !ready;
   exportExcelBtn.disabled = !ready;
@@ -119,7 +228,13 @@ function renderTable() {
     return;
   }
 
-  resultRows.forEach((rowData, rowIndex) => {
+  const filteredRows = getFilteredRowsWithIndex();
+  if (!filteredRows.length) {
+    tableBody.innerHTML = '<tr><td class="px-4 py-6 text-center text-slate-500" colspan="11">No rows match selected calendar range.</td></tr>';
+    return;
+  }
+
+  filteredRows.forEach(({ row: rowData, rowIndex }) => {
     const tr = document.createElement('tr');
     tr.className = 'border-b border-slate-200 dark:border-slate-800 align-top';
 
@@ -368,9 +483,10 @@ function escapeTSVCell(value) {
 }
 
 async function copyTableToExcel() {
-  if (!resultRows.length) return;
+  const filteredRows = getFilteredRowsWithIndex().map((item) => item.row);
+  if (!filteredRows.length) return;
   const rows = [[...DISPLAY_COLUMNS, 'Remark'].map(escapeTSVCell).join('\t')];
-  resultRows.forEach((row) => {
+  filteredRows.forEach((row) => {
     const vals = DISPLAY_COLUMNS.map((c) => escapeTSVCell(row[c] || ''));
     vals.push(escapeTSVCell(getJoinedRemarks(row)));
     rows.push(vals.join('\t'));
@@ -381,14 +497,284 @@ async function copyTableToExcel() {
 }
 
 function exportFilteredData() {
-  const exportData = resultRows.map((row) => ({
+  const exportData = getFilteredRowsWithIndex().map(({ row }) => ({
     ...Object.fromEntries(DISPLAY_COLUMNS.map((c) => [c, row[c] || ''])),
+    Operator: row.Operator || '',
+    'MM-YY': row['MM-YY'] || '',
+    'Window Status': row['Window Status'] || '',
+    'BOA Status': row['BOA Status'] || '',
     Remark: getJoinedRemarks(row)
   }));
   const ws = XLSX.utils.json_to_sheet(exportData);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Filtered Data');
   XLSX.writeFile(wb, 'maersk_weekly_filtered.xlsx');
+}
+
+
+function toDateValue(raw) {
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw;
+  if (typeof raw === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(raw);
+    if (parsed) return new Date(parsed.y, parsed.m - 1, parsed.d, parsed.H, parsed.M, parsed.S || 0);
+  }
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseTimeToHM(timeString) {
+  const [h, m] = String(timeString || '').split(':').map(Number);
+  return { h: Number.isFinite(h) ? h : 0, m: Number.isFinite(m) ? m : 0 };
+}
+
+function getClosestWindowDateTime(ataDate, schedule) {
+  if (!ataDate || !schedule) return null;
+  const { h, m } = parseTimeToHM(schedule.time);
+  const baseSunday = new Date(ataDate);
+  baseSunday.setHours(0, 0, 0, 0);
+  baseSunday.setDate(baseSunday.getDate() - baseSunday.getDay());
+  const candidate = new Date(baseSunday);
+  candidate.setDate(baseSunday.getDate() + schedule.day);
+  candidate.setHours(h, m, 0, 0);
+
+  const prev = new Date(candidate);
+  prev.setDate(candidate.getDate() - 7);
+  const next = new Date(candidate);
+  next.setDate(candidate.getDate() + 7);
+
+  const options = [prev, candidate, next];
+  return options.reduce((best, current) => (Math.abs(current - ataDate) < Math.abs(best - ataDate) ? current : best), options[0]);
+}
+
+function normalizeWindowStatus(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return '';
+  if (text.includes('out')) return 'Out of Window';
+  if (text.includes('on')) return 'On Window';
+  return '';
+}
+
+function parseMonthLabel(rawValue, fallbackDate) {
+  const rawText = String(rawValue || '').trim();
+  if (/^[A-Za-z]{3}-\d{2}$/.test(rawText)) return rawText;
+
+  const fromDate = toDateValue(rawValue) || fallbackDate;
+  if (!fromDate) return '';
+  return `${MONTH_ORDER[fromDate.getMonth()]}-${String(fromDate.getFullYear()).slice(-2)}`;
+}
+
+function enrichOperationalMetrics(rows) {
+  return rows.map((row) => {
+    const service = toDisplayText(findValueByAlias(row, columnAliasMap.Service || ['Service'])).trim().toUpperCase();
+    const ata = toDateValue(findValueByAlias(row, ['ATA', 'Actual Time Arrival', 'Actual Time of Arrival']));
+    const etb = toDateValue(findValueByAlias(row, ['ETB', 'Estimated Time Berthing', 'Est Time Berthing']));
+
+    let windowStatus = normalizeWindowStatus(findValueByAlias(row, ['VS Window']));
+    if (!windowStatus && ata && MASTER_WINDOW_SCHEDULE[service]) {
+      const target = getClosestWindowDateTime(ata, MASTER_WINDOW_SCHEDULE[service]);
+      const gapHours = Math.abs((ata - target) / 36e5);
+      windowStatus = gapHours > 4 ? 'Out of Window' : 'On Window';
+    }
+
+    let boaStatus = '';
+    if (ata && etb) {
+      const btr = new Date(ata.getTime() + 2 * 60 * 60 * 1000);
+      boaStatus = btr < etb ? 'BOA' : 'NOT BOA';
+    }
+
+    const monthLabel = parseMonthLabel(findValueByAlias(row, ['MM-YY', 'MM/YY', 'Month']), ata || etb);
+
+    return {
+      ...row,
+      'Window Status': windowStatus || 'Unknown',
+      'BOA Status': boaStatus || 'Unknown',
+      'MM-YY': monthLabel,
+      _service: service,
+      _operator: toDisplayText(findValueByAlias(row, columnAliasMap.Operator || ['Operator'])).trim().toUpperCase(),
+      _vr: Number.parseFloat(formatVR(findValueByAlias(row, columnAliasMap['Vessel Rate (VR)'] || ['Vessel Rate (VR)']))) || 0,
+      _ci: Number.parseFloat(String(findValueByAlias(row, columnAliasMap['Crane Intencity (CI)'] || ['CI'])).replace(/,/g, '.')) || 0
+    };
+  });
+}
+
+function renderServiceFilters() {
+  if (!serviceFilterList) return;
+  const services = [...new Set(analyticsRows.map((row) => row._service).filter(Boolean))].sort();
+  serviceFilterList.innerHTML = '';
+  if (!services.length) {
+    serviceFilterList.innerHTML = '<p class="text-xs text-slate-400">Upload Excel data to load services.</p>';
+    return;
+  }
+
+  services.forEach((service) => {
+    const id = `svc-${service.replace(/[^a-z0-9]/gi, '-')}`;
+    const label = document.createElement('label');
+    label.className = 'flex items-center gap-2';
+    label.innerHTML = `<input id="${id}" data-service="${service}" type="checkbox" class="rounded border-slate-600 bg-slate-900" checked /><span>${service}</span>`;
+    serviceFilterList.appendChild(label);
+  });
+
+  serviceFilterList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+    checkbox.addEventListener('change', renderAnalyticsCharts);
+  });
+}
+
+function selectedServicesSet() {
+  const set = new Set();
+  serviceFilterList?.querySelectorAll('input[type="checkbox"][data-service]').forEach((el) => {
+    if (el.checked) set.add(el.dataset.service);
+  });
+  return set;
+}
+
+function monthSortKey(label) {
+  const [mon, yr] = String(label || '').split('-');
+  const monthIndex = MONTH_ORDER.indexOf(mon);
+  const year = Number.parseInt(yr, 10);
+  return (Number.isFinite(year) ? year : 0) * 12 + (monthIndex >= 0 ? monthIndex : 0);
+}
+
+function generateWindowPerformanceChart(excelData, options = {}) {
+  const metric = options.metric || metricSelect?.value || 'window';
+  const groupBy = options.groupBy || groupBySelect?.value || 'month';
+  const selectedServices = selectedServicesSet();
+  const scoped = excelData.filter((row) => !selectedServices.size || selectedServices.has(row._service));
+
+  const groupKey = (row) => {
+    if (groupBy === 'service') return row._service || 'Unknown';
+    if (groupBy === 'operator') return row._operator || 'Unknown';
+    return row['MM-YY'] || 'Unknown';
+  };
+
+  const grouped = new Map();
+  scoped.forEach((row) => {
+    const key = groupKey(row);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  });
+
+  let labels = [...grouped.keys()];
+  if (groupBy === 'month') labels = labels.sort((a, b) => monthSortKey(a) - monthSortKey(b));
+  else labels = labels.sort();
+
+  const payload = labels.map((label) => {
+    const rows = grouped.get(label) || [];
+    const total = rows.length || 1;
+    const onWindow = rows.filter((r) => r['Window Status'] === 'On Window').length;
+    const outWindow = rows.filter((r) => r['Window Status'] === 'Out of Window').length;
+    const boa = rows.filter((r) => r['BOA Status'] === 'BOA').length;
+    const notBoa = rows.filter((r) => r['BOA Status'] === 'NOT BOA').length;
+    const avgVR = rows.reduce((a, r) => a + (r._vr || 0), 0) / total;
+    const avgCI = rows.reduce((a, r) => a + (r._ci || 0), 0) / total;
+
+    return {
+      label,
+      windowOnPct: (onWindow / total) * 100,
+      windowOutPct: (outWindow / total) * 100,
+      boaPct: (boa / total) * 100,
+      notBoaPct: (notBoa / total) * 100,
+      avgVR,
+      avgCI
+    };
+  });
+
+  return {
+    metric,
+    labels: payload.map((p) => p.label),
+    onWindow: payload.map((p) => p.windowOnPct),
+    outWindow: payload.map((p) => p.windowOutPct),
+    boa: payload.map((p) => p.boaPct),
+    notBoa: payload.map((p) => p.notBoaPct),
+    avgVR: payload.map((p) => p.avgVR),
+    avgCI: payload.map((p) => p.avgCI)
+  };
+}
+
+function chartThemeOptions(isPercentMetric) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#e2e8f0' } },
+      datalabels: {
+        color: '#f8fafc',
+        anchor: 'end',
+        align: 'top',
+        formatter: (v) => (isPercentMetric ? `${v.toFixed(1)}%` : Number(v).toFixed(2))
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(226,232,240,0.2)' } },
+      y: {
+        beginAtZero: true,
+        ticks: {
+          color: '#e2e8f0',
+          callback: (v) => (isPercentMetric ? `${v}%` : v)
+        },
+        grid: { color: 'rgba(226,232,240,0.2)' }
+      }
+    }
+  };
+}
+
+function renderAnalyticsCharts() {
+  if (!performanceChartCanvas || !averageChartCanvas || !analyticsRows.length || typeof Chart === 'undefined') return;
+  if (window.ChartDataLabels) Chart.register(window.ChartDataLabels);
+
+  const computed = generateWindowPerformanceChart(analyticsRows);
+  const isWindow = computed.metric === 'window';
+  const isBoa = computed.metric === 'boa';
+  const isPercent = isWindow || isBoa;
+
+  let datasets;
+  let chartType = 'bar';
+  if (isWindow) {
+    datasets = [
+      { label: 'On Window', data: computed.onWindow, backgroundColor: '#105b8a' },
+      { label: 'Out of Window', data: computed.outWindow, backgroundColor: '#e57347' }
+    ];
+  } else if (isBoa) {
+    datasets = [
+      { label: 'BOA', data: computed.boa, backgroundColor: '#105b8a' },
+      { label: 'NOT BOA', data: computed.notBoa, backgroundColor: '#e57347' }
+    ];
+  } else if (computed.metric === 'vr') {
+    datasets = [{ label: 'Average Vessel Rate', data: computed.avgVR, backgroundColor: '#105b8a' }];
+  } else {
+    chartType = 'line';
+    datasets = [{ label: 'Average CI', data: computed.avgCI, borderColor: '#e57347', backgroundColor: 'rgba(229,115,71,0.25)', tension: 0.3, fill: true }];
+  }
+
+  if (performanceChart) performanceChart.destroy();
+  performanceChart = new Chart(performanceChartCanvas, {
+    type: chartType,
+    data: { labels: computed.labels, datasets },
+    options: chartThemeOptions(isPercent),
+    plugins: [window.ChartDataLabels].filter(Boolean)
+  });
+
+  const monthlyData = generateWindowPerformanceChart(analyticsRows, { metric: computed.metric, groupBy: 'month' });
+  const averageValue = (() => {
+    if (isWindow) return monthlyData.onWindow.reduce((a, b) => a + b, 0) / Math.max(monthlyData.onWindow.length, 1);
+    if (isBoa) return monthlyData.boa.reduce((a, b) => a + b, 0) / Math.max(monthlyData.boa.length, 1);
+    if (computed.metric === 'vr') return monthlyData.avgVR.reduce((a, b) => a + b, 0) / Math.max(monthlyData.avgVR.length, 1);
+    return monthlyData.avgCI.reduce((a, b) => a + b, 0) / Math.max(monthlyData.avgCI.length, 1);
+  })();
+
+  if (averageChart) averageChart.destroy();
+  averageChart = new Chart(averageChartCanvas, {
+    type: 'bar',
+    data: {
+      labels: ['AVERAGE JAN-OCT'],
+      datasets: [{
+        label: isWindow ? 'On Window %' : isBoa ? 'BOA %' : computed.metric === 'vr' ? 'Avg VR' : 'Avg CI',
+        data: [averageValue],
+        backgroundColor: '#105b8a'
+      }]
+    },
+    options: chartThemeOptions(isPercent),
+    plugins: [window.ChartDataLabels].filter(Boolean)
+  });
 }
 
 function handleImageUpload(event) {

@@ -15,12 +15,12 @@
   </head>
   <body>
     <main class="app-shell">
-      <header>
+      <header class="glass-panel">
         <h1>Terminal Ops Planner Toolkit</h1>
         <p>Client-side Excel + Berth Window tools (GitHub Pages ready)</p>
       </header>
 
-      <section class="card">
+      <section class="card glass-panel">
         <h2>1) Maersk Weekly Meeting - Excel Processing</h2>
         <div class="row controls-row">
           <label class="file-input">
@@ -30,7 +30,7 @@
           <button id="exportExcelBtn" type="button" disabled>Export to Excel</button>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap glass-subpanel">
           <table id="resultTable">
             <thead>
               <tr>
@@ -56,7 +56,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card glass-panel">
         <h2>2) Berth Window Image Filter</h2>
         <div class="row controls-row">
           <label class="file-input">
@@ -71,7 +71,7 @@
     </main>
 
     <div id="modalBackdrop" class="modal-backdrop hidden" aria-hidden="true">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
+      <div class="modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
         <div class="modal-header">
           <h3 id="logModalTitle">Paste Operational Log</h3>
           <button id="closeModalBtn" class="icon-btn" type="button" aria-label="Close">✕</button>
@@ -84,13 +84,13 @@
           placeholder="Example: 07:22 Gang Way Down ... 07:40 Quarantine Clearance ... 08:02 Commence discharge"
         ></textarea>
         <div class="row end">
-          <button id="applyLogBtn" type="button">Parse &amp; Append Remark</button>
+          <button id="applyLogBtn" type="button">Parse &amp; Add as New Remark</button>
         </div>
       </div>
     </div>
 
-    <template id="remarkCellTemplate">
-      <div class="remark-cell">
+    <template id="remarkBlockTemplate">
+      <div class="remark-block glass-subpanel">
         <select class="remark-select">
           <option value="">Select remark...</option>
           <option value="Yard Crowded">Yard Crowded</option>
@@ -102,7 +102,7 @@
           <option value="D/L OOG Units">D/L OOG [number] Units</option>
         </select>
         <input class="remark-extra hidden" type="text" placeholder="Extra input" />
-        <button class="icon-btn paste-log-btn" title="Paste log" type="button">📋</button>
+        <button class="mini-btn remove-remark-btn" type="button" title="Remove remark">✕</button>
         <div class="remark-output"></div>
       </div>
     </template>

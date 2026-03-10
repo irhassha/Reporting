@@ -356,16 +356,18 @@ function getJoinedRemarks(row) {
   return row.remarkBlocks.map((block) => (block.kind === 'log' ? block.text : formatPresetBlock(block))).filter(Boolean).join('\n');
 }
 
-function sanitizeTSV(value) {
-  return String(value).replace(/\t/g, ' ').replace(/\r/g, '');
+function escapeTSVCell(value) {
+  const text = String(value ?? '').replace(/\r/g, '');
+  if (!/[\t\n"]/.test(text)) return text;
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 async function copyTableToExcel() {
   if (!resultRows.length) return;
-  const rows = [[...DISPLAY_COLUMNS, 'Remark'].join('\t')];
+  const rows = [[...DISPLAY_COLUMNS, 'Remark'].map(escapeTSVCell).join('\t')];
   resultRows.forEach((row) => {
-    const vals = DISPLAY_COLUMNS.map((c) => sanitizeTSV(row[c] || ''));
-    vals.push(sanitizeTSV(getJoinedRemarks(row)));
+    const vals = DISPLAY_COLUMNS.map((c) => escapeTSVCell(row[c] || ''));
+    vals.push(escapeTSVCell(getJoinedRemarks(row)));
     rows.push(vals.join('\t'));
   });
   await navigator.clipboard.writeText(rows.join('\n'));
@@ -410,104 +412,64 @@ function processBerthImage() {
   const h = berthCanvas.height;
   const leftKeep = Math.max(Math.round(w * 0.12), 110);
 
-  const source = ctx.getImageData(0, 0, w, h);
-  const src = source.data;
-
+  const image = ctx.getImageData(0, 0, w, h);
+  const src = image.data;
+  const block = 10;
   const target = { r: 145, g: 230, b: 245 };
-  const tolerance = 72;
-  const mask = new Uint8Array(w * h);
+  const tolerance = 84;
 
-  for (let y = 0; y < h; y++) {
-    for (let x = leftKeep; x < w; x++) {
-      const idx = y * w + x;
-      const i = idx * 4;
-      const r = src[i], g = src[i + 1], b = src[i + 2], a = src[i + 3];
-      if (!a) continue;
-      const dist = Math.hypot(r - target.r, g - target.g, b - target.b);
-      if (dist <= tolerance) mask[idx] = 1;
-    }
-  }
+  for (let by = 0; by < h; by += block) {
+    for (let bx = leftKeep; bx < w; bx += block) {
+      const ex = Math.min(w, bx + block);
+      const ey = Math.min(h, by + block);
+      const area = (ex - bx) * (ey - by);
 
-  const output = ctx.createImageData(w, h);
-  const out = output.data;
+      let targetCount = 0;
+      let colorfulCount = 0;
+      let darkCount = 0;
+      let nonWhiteCount = 0;
 
-  // Preserve full left-axis labels exactly.
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < leftKeep; x++) {
-      const idx = y * w + x;
-      const i = idx * 4;
-      out[i] = src[i]; out[i + 1] = src[i + 1]; out[i + 2] = src[i + 2]; out[i + 3] = src[i + 3];
-    }
-  }
+      for (let y = by; y < ey; y++) {
+        for (let x = bx; x < ex; x++) {
+          const i = (y * w + x) * 4;
+          const r = src[i];
+          const g = src[i + 1];
+          const b = src[i + 2];
+          const a = src[i + 3];
+          if (!a) continue;
 
-  // Right area default clean background (fully filtered).
-  for (let y = 0; y < h; y++) {
-    for (let x = leftKeep; x < w; x++) {
-      const idx = y * w + x;
-      const i = idx * 4;
-      out[i] = 255; out[i + 1] = 255; out[i + 2] = 255; out[i + 3] = 255;
-    }
-  }
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const sat = max === 0 ? 0 : (max - min) / max;
+          const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          const isTarget = Math.hypot(r - target.r, g - target.g, b - target.b) <= tolerance;
 
-  // Restore only valid light-blue clusters + nearby text pixels.
-  const visited = new Uint8Array(w * h);
-  const n4 = [1, -1, w, -w];
-  for (let y = 0; y < h; y++) {
-    for (let x = leftKeep; x < w; x++) {
-      const seed = y * w + x;
-      if (!mask[seed] || visited[seed]) continue;
-
-      const q = [seed];
-      visited[seed] = 1;
-      let head = 0;
-      let minX = x, maxX = x, minY = y, maxY = y, count = 0;
-
-      while (head < q.length) {
-        const cur = q[head++];
-        const cx = cur % w;
-        const cy = Math.floor(cur / w);
-        count++;
-        if (cx < minX) minX = cx;
-        if (cx > maxX) maxX = cx;
-        if (cy < minY) minY = cy;
-        if (cy > maxY) maxY = cy;
-
-        for (const d of n4) {
-          const n = cur + d;
-          if (n < 0 || n >= w * h || visited[n] || !mask[n]) continue;
-          const nx = n % w;
-          const ny = Math.floor(n / w);
-          if (nx < leftKeep || ny < 0 || ny >= h) continue;
-          visited[n] = 1;
-          q.push(n);
+          if (isTarget) targetCount++;
+          if (sat > 0.18 && lum > 35 && lum < 250 && !isTarget) colorfulCount++;
+          if (lum < 70) darkCount++;
+          if (lum < 246) nonWhiteCount++;
         }
       }
 
-      const boxW = maxX - minX + 1;
-      const boxH = maxY - minY + 1;
-      const area = boxW * boxH;
-      const density = count / Math.max(area, 1);
+      const containsTarget = targetCount / area > 0.08;
+      const redactColorBlock = colorfulCount / area > 0.08;
+      const redactWhiteBoxWithBorder = darkCount / area > 0.1 && nonWhiteCount / area > 0.28;
+      const shouldRedact = !containsTarget && (redactColorBlock || redactWhiteBoxWithBorder);
+      if (!shouldRedact) continue;
 
-      // Skip giant sparse regions that can leak unrelated white boxes.
-      if (count < 80 || boxW < 10 || boxH < 10 || density < 0.09 || boxW > w * 0.45 || boxH > h * 0.45) continue;
-
-      const pad = 2;
-      const sx = Math.max(leftKeep, minX - pad);
-      const ex = Math.min(w - 1, maxX + pad);
-      const sy = Math.max(0, minY - pad);
-      const ey = Math.min(h - 1, maxY + pad);
-
-      for (let yy = sy; yy <= ey; yy++) {
-        for (let xx = sx; xx <= ex; xx++) {
-          const idx = yy * w + xx;
-          const i = idx * 4;
-          out[i] = src[i]; out[i + 1] = src[i + 1]; out[i + 2] = src[i + 2]; out[i + 3] = src[i + 3];
+      for (let y = by; y < ey; y++) {
+        for (let x = bx; x < ex; x++) {
+          const i = (y * w + x) * 4;
+          src[i] = 204;
+          src[i + 1] = 204;
+          src[i + 2] = 204;
+          src[i + 3] = 255;
         }
       }
     }
   }
 
-  ctx.putImageData(output, 0, 0);
+  ctx.putImageData(image, 0, 0);
   downloadImageBtn.disabled = false;
 }
 

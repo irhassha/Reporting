@@ -14,6 +14,8 @@ const processImageBtn = document.getElementById('processImageBtn');
 const downloadImageBtn = document.getElementById('downloadImageBtn');
 const berthCanvas = document.getElementById('berthCanvas');
 const ctx = berthCanvas.getContext('2d');
+const filterOpacityInput = document.getElementById('filterOpacity');
+const filterOpacityValue = document.getElementById('filterOpacityValue');
 
 const resultRows = [];
 let activeRemarkRowIndex = null;
@@ -48,6 +50,9 @@ applyLogBtn.addEventListener('click', applyLogParse);
 imageInput.addEventListener('change', handleImageUpload);
 processImageBtn.addEventListener('click', processBerthImage);
 downloadImageBtn.addEventListener('click', downloadCanvasImage);
+filterOpacityInput.addEventListener('input', () => {
+  filterOpacityValue.textContent = `${Math.round(Number(filterOpacityInput.value) * 100)}%`;
+});
 
 function normalizeHeader(header) {
   return String(header || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -126,7 +131,7 @@ function renderTable() {
     });
 
     const remarkTd = document.createElement('td');
-    remarkTd.className = 'px-2 py-2 align-top';
+    remarkTd.className = 'px-2 py-2 align-top min-w-[26rem]';
     remarkTd.appendChild(buildRemarkCell(rowIndex));
     tr.appendChild(remarkTd);
     tableBody.appendChild(tr);
@@ -408,41 +413,65 @@ function handleImageUpload(event) {
 function processBerthImage() {
   if (!loadedImage) return;
   ctx.drawImage(loadedImage, 0, 0);
+  const w = berthCanvas.width;
+  const h = berthCanvas.height;
+  const leftKeep = Math.max(Math.round(w * 0.12), 110);
+  const opacity = Math.min(Math.max(Number(filterOpacityInput.value) || 0.8, 0), 1);
 
-  const width = berthCanvas.width;
-  const height = berthCanvas.height;
-  const leftKeepWidth = Math.max(Math.round(width * 0.12), 110);
+  const source = ctx.getImageData(0, 0, w, h);
+  const src = source.data;
 
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
   const target = { r: 145, g: 230, b: 245 };
-  const tolerance = 78;
-  const mask = new Uint8Array(width * height);
+  const tolerance = 72;
+  const mask = new Uint8Array(w * h);
 
-  for (let y = 0; y < height; y++) {
-    for (let x = leftKeepWidth; x < width; x++) {
-      const idx = y * width + x;
+  for (let y = 0; y < h; y++) {
+    for (let x = leftKeep; x < w; x++) {
+      const idx = y * w + x;
       const i = idx * 4;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const a = data[i + 3];
-      if (a === 0) continue;
-
-      const dist = Math.sqrt((r - target.r) ** 2 + (g - target.g) ** 2 + (b - target.b) ** 2);
-      if (dist > tolerance && isLikelyColored(r, g, b)) mask[idx] = 1;
+      const r = src[i];
+      const g = src[i + 1];
+      const b = src[i + 2];
+      const a = src[i + 3];
+      if (!a) continue;
+      const dist = Math.hypot(r - target.r, g - target.g, b - target.b);
+      if (dist <= tolerance) mask[idx] = 1;
     }
   }
 
-  const visited = new Uint8Array(width * height);
-  const components = [];
+  const output = ctx.createImageData(w, h);
+  const out = output.data;
 
-  for (let y = 0; y < height; y++) {
-    for (let x = leftKeepWidth; x < width; x++) {
-      const seed = y * width + x;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < leftKeep; x++) {
+      const idx = y * w + x;
+      const i = idx * 4;
+      out[i] = src[i];
+      out[i + 1] = src[i + 1];
+      out[i + 2] = src[i + 2];
+      out[i + 3] = src[i + 3];
+    }
+  }
+
+  for (let y = 0; y < h; y++) {
+    for (let x = leftKeep; x < w; x++) {
+      const idx = y * w + x;
+      const i = idx * 4;
+      out[i] = src[i];
+      out[i + 1] = src[i + 1];
+      out[i + 2] = src[i + 2];
+      out[i + 3] = src[i + 3];
+    }
+  }
+
+  const visited = new Uint8Array(w * h);
+  const n4 = [1, -1, w, -w];
+  for (let y = 0; y < h; y++) {
+    for (let x = leftKeep; x < w; x++) {
+      const seed = y * w + x;
       if (!mask[seed] || visited[seed]) continue;
 
-      const queue = [seed];
+      const q = [seed];
       visited[seed] = 1;
       let head = 0;
       let minX = x;
@@ -451,43 +480,73 @@ function processBerthImage() {
       let maxY = y;
       let count = 0;
 
-      while (head < queue.length) {
-        const current = queue[head++];
-        const cx = current % width;
-        const cy = Math.floor(current / width);
-        count += 1;
-
+      while (head < q.length) {
+        const cur = q[head++];
+        const cx = cur % w;
+        const cy = Math.floor(cur / w);
+        count++;
         if (cx < minX) minX = cx;
         if (cx > maxX) maxX = cx;
         if (cy < minY) minY = cy;
         if (cy > maxY) maxY = cy;
 
-        const neighbors = [current - 1, current + 1, current - width, current + width];
-        neighbors.forEach((n) => {
-          if (n < 0 || n >= width * height) return;
-          const nx = n % width;
-          const ny = Math.floor(n / width);
-          if (nx < leftKeepWidth || ny < 0 || ny >= height) return;
-          if (!mask[n] || visited[n]) return;
+        for (const d of n4) {
+          const n = cur + d;
+          if (n < 0 || n >= w * h || visited[n] || !mask[n]) continue;
+          const nx = n % w;
+          const ny = Math.floor(n / w);
+          if (nx < leftKeep || ny < 0 || ny >= h) continue;
           visited[n] = 1;
-          queue.push(n);
-        });
+          q.push(n);
+        }
       }
 
       const boxW = maxX - minX + 1;
       const boxH = maxY - minY + 1;
-      if (count >= 60 && boxW >= 8 && boxH >= 8) {
-        components.push({ x: minX, y: minY, w: boxW, h: boxH });
+      const area = boxW * boxH;
+      const density = count / Math.max(area, 1);
+      if (count < 80 || boxW < 10 || boxH < 10 || density < 0.09 || boxW > w * 0.45 || boxH > h * 0.45) continue;
+
+      const pad = 2;
+      const sx = Math.max(leftKeep, minX - pad);
+      const ex = Math.min(w - 1, maxX + pad);
+      const sy = Math.max(0, minY - pad);
+      const ey = Math.min(h - 1, maxY + pad);
+
+      for (let yy = sy; yy <= ey; yy++) {
+        for (let xx = sx; xx <= ex; xx++) {
+          const idx = yy * w + xx;
+          const i = idx * 4;
+          out[i] = src[i];
+          out[i + 1] = src[i + 1];
+          out[i + 2] = src[i + 2];
+          out[i + 3] = src[i + 3];
+        }
       }
     }
   }
 
-  ctx.fillStyle = '#cccccc';
-  components.forEach((box) => {
-    const safeX = Math.max(box.x, leftKeepWidth);
-    const safeW = box.w - (safeX - box.x);
-    if (safeW > 0) ctx.fillRect(safeX, box.y, safeW, box.h);
-  });
+  for (let y = 0; y < h; y++) {
+    for (let x = leftKeep; x < w; x++) {
+      const idx = y * w + x;
+      if (mask[idx]) continue;
+      const i = idx * 4;
+      const r = out[i];
+      const g = out[i + 1];
+      const b = out[i + 2];
+      out[i] = Math.round(r * (1 - opacity) + 204 * opacity);
+      out[i + 1] = Math.round(g * (1 - opacity) + 204 * opacity);
+      out[i + 2] = Math.round(b * (1 - opacity) + 204 * opacity);
+      out[i + 3] = 255;
+    }
+  }
 
+  ctx.putImageData(output, 0, 0);
   downloadImageBtn.disabled = false;
+}
+function downloadCanvasImage() {
+  const link = document.createElement('a');
+  link.download = 'berth_window_filtered.png';
+  link.href = berthCanvas.toDataURL('image/png');
+  link.click();
 }

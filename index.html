@@ -79,7 +79,7 @@
               <table id="resultTable" class="w-full text-left border-collapse table-fixed">
                 <thead>
                   <tr class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wider text-slate-500">
-                    <th class="px-2 py-2">Vessel Name</th><th class="px-2 py-2">Service</th><th class="px-2 py-2">ATB</th><th class="px-2 py-2">ATD</th><th class="px-2 py-2">Total (Boxes)</th><th class="px-2 py-2">Total Teus</th><th class="px-2 py-2">Crane Intencity (CI)</th><th class="px-2 py-2">Vessel Rate (VR)</th><th class="px-2 py-2">ATB to Fst lift</th><th class="px-2 py-2">Lst lift to ATD</th><th class="px-2 py-2">Remark</th>
+                    <th class="px-2 py-2">Vessel Name</th><th class="px-2 py-2">Service</th><th class="px-2 py-2">ATB</th><th class="px-2 py-2">ATD</th><th class="px-2 py-2">Total (Boxes)</th><th class="px-2 py-2">Total Teus</th><th class="px-2 py-2">Crane Intencity (CI)</th><th class="px-2 py-2">Vessel Rate (VR)</th><th class="px-2 py-2">ATB to Fst lift</th><th class="px-2 py-2">Lst lift to ATD</th><th class="px-2 py-2 w-[26rem]">Remark</th>
                   </tr>
                 </thead>
                 <tbody id="tableBody">
@@ -105,6 +105,11 @@
               </label>
               <button id="processImageBtn" class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold" disabled type="button">Process Image</button>
               <button id="downloadImageBtn" class="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm font-semibold" disabled type="button">Download Image</button>
+            </div>
+            <div class="flex items-center gap-3">
+              <label for="filterOpacity" class="text-sm font-medium text-slate-600 dark:text-slate-300">Filter Opacity</label>
+              <input id="filterOpacity" type="range" min="0.2" max="1" step="0.05" value="0.8" class="w-52 accent-primary" />
+              <span id="filterOpacityValue" class="text-sm font-semibold text-slate-600 dark:text-slate-300">80%</span>
             </div>
             <canvas id="berthCanvas" class="w-full max-h-[620px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white"></canvas>
           </div>

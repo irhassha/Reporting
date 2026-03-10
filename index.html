@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: '#0b50da',
+              'background-light': '#f5f6f8',
+              'background-dark': '#101622'
+            },
+            fontFamily: {
+              display: ['Plus Jakarta Sans', 'sans-serif']
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      body { font-family: "Plus Jakarta Sans", sans-serif; }
+      .glass-panel { background: rgb(255 255 255 / 0.03); backdrop-filter: blur(10px); border: 1px solid rgb(255 255 255 / 0.1); }
+    </style>
+    <title>Terminal Ops Planner</title>
+  </head>
+  <body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+    <div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+      <header class="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-slate-800 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md px-4 md:px-8 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+          <div class="flex items-center gap-3 text-primary">
+            <span class="material-symbols-outlined text-3xl">grid_view</span>
+            <h2 class="text-xl font-extrabold tracking-tight">Terminal <span class="text-slate-400 font-medium">Ops</span></h2>
+          </div>
+        </div>
+      </header>
+
+      <main class="flex-1 w-full max-w-7xl mx-auto px-3 md:px-6 py-8 space-y-8">
+        <section class="relative rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 min-h-[240px] flex items-center">
+          <div class="absolute inset-0 opacity-40" style="background-image: linear-gradient(45deg, #0b50da 0%, transparent 100%)"></div>
+          <div class="relative z-10 px-5 md:px-8 max-w-3xl">
+            <h1 class="text-3xl md:text-5xl font-black leading-tight mb-3">Terminal Ops Planner Toolkit</h1>
+            <p class="text-slate-300">Excel filtering, structured remarks, log parsing, and berth image filtering — fully client-side.</p>
+          </div>
+        </section>
+
+        <section class="space-y-4" id="tool-excel">
+          <div class="flex items-end justify-between">
+            <div>
+              <h2 class="text-2xl font-bold">Tool 1: Maersk Weekly Meeting</h2>
+              <p class="text-slate-500 dark:text-slate-400">Automated manifest processing and reporting engine.</p>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+            <div class="p-4 md:p-6 flex flex-wrap gap-3 border-b border-slate-200 dark:border-slate-800">
+              <label class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 cursor-pointer">
+                <span class="material-symbols-outlined text-sm">upload_file</span>
+                <span class="text-sm font-medium">Upload .xlsx</span>
+                <input id="excelInput" class="hidden" type="file" accept=".xlsx,.xls" />
+              </label>
+              <button id="copyTableBtn" class="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm font-semibold" disabled type="button">📋 Copy Table</button>
+              <button id="exportExcelBtn" class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold" disabled type="button">Export to Excel</button>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table id="resultTable" class="w-full text-left border-collapse table-fixed">
+                <thead>
+                  <tr class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wider text-slate-500">
+                    <th class="px-2 py-2">Vessel Name</th><th class="px-2 py-2">Service</th><th class="px-2 py-2">ATB</th><th class="px-2 py-2">ATD</th><th class="px-2 py-2">Total (Boxes)</th><th class="px-2 py-2">Total Teus</th><th class="px-2 py-2">Crane Intencity (CI)</th><th class="px-2 py-2">Vessel Rate (VR)</th><th class="px-2 py-2">ATB to Fst lift</th><th class="px-2 py-2">Lst lift to ATD</th><th class="px-2 py-2">Remark</th>
+                  </tr>
+                </thead>
+                <tbody id="tableBody">
+                  <tr><td class="px-4 py-6 text-center text-slate-500" colspan="11">Upload an Excel file to begin.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="space-y-4" id="tool-image">
+          <div>
+            <h2 class="text-2xl font-bold">Tool 2: Berth Window Image Filter</h2>
+            <p class="text-slate-500 dark:text-slate-400">Render only target light-blue vessel boxes; hide all non-target vessels.</p>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-4 md:p-6 space-y-4">
+            <div class="flex flex-wrap gap-3">
+              <label class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 cursor-pointer">
+                <span class="material-symbols-outlined text-sm">image</span>
+                <span class="text-sm font-medium">Upload image</span>
+                <input id="imageInput" class="hidden" type="file" accept="image/*" />
+              </label>
+              <button id="processImageBtn" class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold" disabled type="button">Process Image</button>
+              <button id="downloadImageBtn" class="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm font-semibold" disabled type="button">Download Image</button>
+            </div>
+            <canvas id="berthCanvas" class="w-full max-h-[620px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white"></canvas>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="modalBackdrop" class="hidden fixed inset-0 z-[60] bg-black/60 p-4">
+      <div class="max-w-2xl mx-auto mt-12 glass-panel rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-2">
+          <h3 id="logModalTitle" class="text-lg font-bold">Paste Operational Log</h3>
+          <button id="closeModalBtn" class="h-8 w-8 rounded-lg bg-slate-200/20" type="button">✕</button>
+        </div>
+        <p class="text-sm text-slate-400 mb-3">Paste raw log text. We will extract Gang Way Down, Quarantine Clearance, and Commence time.</p>
+        <textarea id="logTextarea" class="w-full min-h-[190px] rounded-xl border-slate-600 bg-slate-900/70 text-slate-100"></textarea>
+        <div class="flex justify-end mt-3"><button id="applyLogBtn" class="px-4 py-2 rounded-lg bg-primary text-white" type="button">Parse & Add as New Remark</button></div>
+      </div>
+    </div>
+
+    <template id="remarkBlockTemplate">
+      <div class="remark-block rounded-xl border border-slate-200 dark:border-slate-700 p-2 bg-slate-50 dark:bg-slate-800/40">
+        <div class="flex gap-2 items-start">
+          <div class="flex-1 space-y-2">
+            <select class="remark-select w-full rounded-lg bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-sm">
+              <option value="">Select remark...</option>
+              <option value="Yard Crowded">Yard Crowded</option>
+              <option value="Stop Ops - Heavy rain & Strong Wind">Stop Ops - Heavy rain & Strong Wind</option>
+              <option value="Stop Ops - Strong Wind">Stop Ops - Strong Wind</option>
+              <option value="QC Trouble Spreader">QC [801-808] Trouble Spreader</option>
+              <option value="DOOG Units">DOOG [number] Units</option>
+              <option value="LOOG Units">LOOG [number] Units</option>
+              <option value="D/L OOG Units">D/L OOG [number] Units</option>
+            </select>
+            <input class="remark-extra hidden w-full rounded-lg bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-sm" type="text" placeholder="Extra input" />
+            <div class="remark-chip hidden text-xs rounded-full px-3 py-1 bg-primary/10 text-primary border border-primary/30 w-fit"></div>
+          </div>
+          <div class="flex gap-1">
+            <button class="edit-remark-btn hidden h-8 px-2 rounded bg-slate-200 dark:bg-slate-700 text-xs" type="button">Edit</button>
+            <button class="reset-remark-btn hidden h-8 w-8 rounded bg-slate-200 dark:bg-slate-700 text-xs" type="button">✕</button>
+            <button class="remove-remark-btn h-8 w-8 rounded bg-slate-200 dark:bg-slate-700 text-xs" type="button">🗑</button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

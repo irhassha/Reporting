@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terminal Ops Planner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="glass-panel">
+        <h1>Terminal Ops Planner Toolkit</h1>
+        <p>Client-side Excel + Berth Window tools (GitHub Pages ready)</p>
+      </header>
+
+      <section class="card glass-panel">
+        <h2>1) Maersk Weekly Meeting - Excel Processing</h2>
+        <div class="row controls-row">
+          <label class="file-input">
+            <span>Upload .xlsx</span>
+            <input id="excelInput" type="file" accept=".xlsx,.xls" />
+          </label>
+          <button id="copyTableBtn" type="button" disabled>📋 Copy Table</button>
+          <button id="exportExcelBtn" type="button" disabled>Export to Excel</button>
+        </div>
+
+        <div class="table-wrap glass-subpanel">
+          <table id="resultTable">
+            <thead>
+              <tr>
+                <th>Vessel Name</th>
+                <th>Service</th>
+                <th>ATB</th>
+                <th>ATD</th>
+                <th>Total (Boxes)</th>
+                <th>Total Teus</th>
+                <th>Crane Intencity (CI)</th>
+                <th>Vessel Rate (VR)</th>
+                <th>ATB to Fst lift</th>
+                <th>Lst lift to ATD</th>
+                <th>Remark</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr>
+                <td colspan="11" class="empty">Upload an Excel file to begin.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card glass-panel">
+        <h2>2) Berth Window Image Filter</h2>
+        <div class="row controls-row">
+          <label class="file-input">
+            <span>Upload image</span>
+            <input id="imageInput" type="file" accept="image/*" />
+          </label>
+          <button id="processImageBtn" type="button" disabled>Process Image</button>
+          <button id="downloadImageBtn" type="button" disabled>Download Image</button>
+        </div>
+        <canvas id="berthCanvas"></canvas>
+      </section>
+    </main>
+
+    <div id="modalBackdrop" class="modal-backdrop hidden" aria-hidden="true">
+      <div class="modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
+        <div class="modal-header">
+          <h3 id="logModalTitle">Paste Operational Log</h3>
+          <button id="closeModalBtn" class="icon-btn" type="button" aria-label="Close">✕</button>
+        </div>
+        <p class="modal-subtitle">
+          Paste raw log text. We'll extract Gang Way Down, Quarantine Clearance, and Commence time.
+        </p>
+        <textarea
+          id="logTextarea"
+          placeholder="Example: 07:22 Gang Way Down ... 07:40 Quarantine Clearance ... 08:02 Commence discharge"
+        ></textarea>
+        <div class="row end">
+          <button id="applyLogBtn" type="button">Parse &amp; Add as New Remark</button>
+        </div>
+      </div>
+    </div>
+
+    <template id="remarkBlockTemplate">
+      <div class="remark-block glass-subpanel">
+        <select class="remark-select">
+          <option value="">Select remark...</option>
+          <option value="Yard Crowded">Yard Crowded</option>
+          <option value="Stop Ops - Heavy rain &amp; Strong Wind">Stop Ops - Heavy rain &amp; Strong Wind</option>
+          <option value="Stop Ops - Strong Wind">Stop Ops - Strong Wind</option>
+          <option value="QC Trouble Spreader">QC [801-808] Trouble Spreader</option>
+          <option value="DOOG Units">DOOG [number] Units</option>
+          <option value="LOOG Units">LOOG [number] Units</option>
+          <option value="D/L OOG Units">D/L OOG [number] Units</option>
+        </select>
+        <input class="remark-extra hidden" type="text" placeholder="Extra input" />
+        <div class="remark-view hidden"></div>
+        <div class="remark-inline-actions">
+          <button class="mini-btn edit-remark-btn hidden" type="button" title="Edit">Edit</button>
+          <button class="mini-btn reset-remark-btn hidden" type="button" title="Reset">✕</button>
+          <button class="mini-btn remove-remark-btn" type="button" title="Remove remark">🗑</button>
+        </div>
+      </div>
+    </template>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

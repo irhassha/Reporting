@@ -408,57 +408,39 @@ function handleImageUpload(event) {
 function processBerthImage() {
   if (!loadedImage) return;
   ctx.drawImage(loadedImage, 0, 0);
-  const w = berthCanvas.width;
-  const h = berthCanvas.height;
-  const leftKeep = Math.max(Math.round(w * 0.12), 110);
 
-  const image = ctx.getImageData(0, 0, w, h);
-  const data = image.data;
+  const width = berthCanvas.width;
+  const height = berthCanvas.height;
+  const leftKeepWidth = Math.max(Math.round(width * 0.12), 110);
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
   const target = { r: 145, g: 230, b: 245 };
   const tolerance = 78;
-  const targetMask = new Uint8Array(w * h);
-  const colorMask = new Uint8Array(w * h);
+  const mask = new Uint8Array(width * height);
 
-  for (let y = 0; y < h; y++) {
-    for (let x = leftKeep; x < w; x++) {
-      const idx = y * w + x;
+  for (let y = 0; y < height; y++) {
+    for (let x = leftKeepWidth; x < width; x++) {
+      const idx = y * width + x;
       const i = idx * 4;
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
       const a = data[i + 3];
-      if (!a) continue;
+      if (a === 0) continue;
 
-      const dist = Math.hypot(r - target.r, g - target.g, b - target.b);
-      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const sat = max === 0 ? 0 : (max - min) / max;
-
-      if (dist <= tolerance) {
-        targetMask[idx] = 1;
-      }
-
-      const isColoredBox = sat > 0.2 && lum > 30 && lum < 245 && dist > tolerance;
-      const isWhiteBoxWithDarkBorder = lum > 170 && lum < 248;
-      if (isColoredBox || isWhiteBoxWithDarkBorder) {
-        colorMask[idx] = 1;
-      }
+      const dist = Math.sqrt((r - target.r) ** 2 + (g - target.g) ** 2 + (b - target.b) ** 2);
+      if (dist > tolerance && isLikelyColored(r, g, b)) mask[idx] = 1;
     }
   }
 
-  const visited = new Uint8Array(w * h);
-  const dirs = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1]
-  ];
+  const visited = new Uint8Array(width * height);
+  const components = [];
 
-  for (let y = 0; y < h; y++) {
-    for (let x = leftKeep; x < w; x++) {
-      const seed = y * w + x;
-      if (!colorMask[seed] || visited[seed] || targetMask[seed]) continue;
+  for (let y = 0; y < height; y++) {
+    for (let x = leftKeepWidth; x < width; x++) {
+      const seed = y * width + x;
+      if (!mask[seed] || visited[seed]) continue;
 
       const queue = [seed];
       visited[seed] = 1;
@@ -468,64 +450,44 @@ function processBerthImage() {
       let minY = y;
       let maxY = y;
       let count = 0;
-      let targetTouch = 0;
 
       while (head < queue.length) {
-        const cur = queue[head++];
-        const cx = cur % w;
-        const cy = Math.floor(cur / w);
-        count++;
+        const current = queue[head++];
+        const cx = current % width;
+        const cy = Math.floor(current / width);
+        count += 1;
+
         if (cx < minX) minX = cx;
         if (cx > maxX) maxX = cx;
         if (cy < minY) minY = cy;
         if (cy > maxY) maxY = cy;
 
-        for (const [dx, dy] of dirs) {
-          const nx = cx + dx;
-          const ny = cy + dy;
-          if (nx < leftKeep || nx >= w || ny < 0 || ny >= h) continue;
-          const n = ny * w + nx;
-          if (targetMask[n]) {
-            targetTouch++;
-            continue;
-          }
-          if (!colorMask[n] || visited[n]) continue;
+        const neighbors = [current - 1, current + 1, current - width, current + width];
+        neighbors.forEach((n) => {
+          if (n < 0 || n >= width * height) return;
+          const nx = n % width;
+          const ny = Math.floor(n / width);
+          if (nx < leftKeepWidth || ny < 0 || ny >= height) return;
+          if (!mask[n] || visited[n]) return;
           visited[n] = 1;
           queue.push(n);
-        }
+        });
       }
 
       const boxW = maxX - minX + 1;
       const boxH = maxY - minY + 1;
-      const area = boxW * boxH;
-      const denseEnough = count / Math.max(area, 1) > 0.12;
-      const validSize = boxW >= 8 && boxH >= 8 && count >= 40;
-      if (!validSize || !denseEnough || targetTouch > count * 0.12) continue;
-
-      const pad = 1;
-      const sx = Math.max(leftKeep, minX - pad);
-      const ex = Math.min(w - 1, maxX + pad);
-      const sy = Math.max(0, minY - pad);
-      const ey = Math.min(h - 1, maxY + pad);
-
-      for (let yy = sy; yy <= ey; yy++) {
-        for (let xx = sx; xx <= ex; xx++) {
-          const idx = (yy * w + xx) * 4;
-          data[idx] = 204;
-          data[idx + 1] = 204;
-          data[idx + 2] = 204;
-          data[idx + 3] = 255;
-        }
+      if (count >= 60 && boxW >= 8 && boxH >= 8) {
+        components.push({ x: minX, y: minY, w: boxW, h: boxH });
       }
     }
   }
 
-  ctx.putImageData(image, 0, 0);
+  ctx.fillStyle = '#cccccc';
+  components.forEach((box) => {
+    const safeX = Math.max(box.x, leftKeepWidth);
+    const safeW = box.w - (safeX - box.x);
+    if (safeW > 0) ctx.fillRect(safeX, box.y, safeW, box.h);
+  });
+
   downloadImageBtn.disabled = false;
-}
-function downloadCanvasImage() {
-  const link = document.createElement('a');
-  link.download = 'berth_window_filtered.png';
-  link.href = berthCanvas.toDataURL('image/png');
-  link.click();
 }

@@ -20,16 +20,7 @@ let activeRemarkRowIndex = null;
 let loadedImage = null;
 
 const DISPLAY_COLUMNS = [
-  'Vessel Name',
-  'Service',
-  'ATB',
-  'ATD',
-  'Total (Boxes)',
-  'Total Teus',
-  'Crane Intencity (CI)',
-  'Vessel Rate (VR)',
-  'ATB to Fst lift',
-  'Lst lift to ATD'
+  'Vessel Name', 'Service', 'ATB', 'ATD', 'Total (Boxes)', 'Total Teus', 'Crane Intencity (CI)', 'Vessel Rate (VR)', 'ATB to Fst lift', 'Lst lift to ATD'
 ];
 
 const columnAliasMap = {
@@ -54,7 +45,6 @@ modalBackdrop.addEventListener('click', (event) => {
   if (event.target === modalBackdrop) closeModal();
 });
 applyLogBtn.addEventListener('click', applyLogParse);
-
 imageInput.addEventListener('change', handleImageUpload);
 processImageBtn.addEventListener('click', processBerthImage);
 downloadImageBtn.addEventListener('click', downloadCanvasImage);
@@ -79,9 +69,9 @@ function toDisplayText(value) {
 }
 
 function formatVR(rawValue) {
-  const num = Number(String(rawValue).replace(/,/g, '.'));
-  if (Number.isFinite(num)) return num.toFixed(1);
-  return toDisplayText(rawValue);
+  const clean = String(rawValue ?? '').trim().replace(/,/g, '.').replace(/[^\d.-]/g, '');
+  const num = Number(clean);
+  return Number.isFinite(num) ? num.toFixed(1) : '';
 }
 
 function createRowFromSource(sourceRow) {
@@ -95,9 +85,7 @@ function createRowFromSource(sourceRow) {
 }
 
 function operatorAllowed(sourceRow) {
-  const op = toDisplayText(findValueByAlias(sourceRow, columnAliasMap.Operator || ['Operator']))
-    .trim()
-    .toUpperCase();
+  const op = toDisplayText(findValueByAlias(sourceRow, columnAliasMap.Operator || ['Operator'])).trim().toUpperCase();
   return op === 'MCC' || op === 'MAE';
 }
 
@@ -114,27 +102,31 @@ async function handleExcelUpload(event) {
   rawRows.filter(operatorAllowed).forEach((src) => resultRows.push(createRowFromSource(src)));
 
   renderTable();
-  const enabled = resultRows.length > 0;
-  exportExcelBtn.disabled = !enabled;
-  copyTableBtn.disabled = !enabled;
+  const ready = resultRows.length > 0;
+  copyTableBtn.disabled = !ready;
+  exportExcelBtn.disabled = !ready;
 }
 
 function renderTable() {
   tableBody.innerHTML = '';
   if (!resultRows.length) {
-    tableBody.innerHTML = '<tr><td colspan="11" class="empty">No rows match Operator MCC/MAE.</td></tr>';
+    tableBody.innerHTML = '<tr><td class="px-4 py-6 text-center text-slate-500" colspan="11">No rows match Operator MCC/MAE.</td></tr>';
     return;
   }
 
   resultRows.forEach((rowData, rowIndex) => {
     const tr = document.createElement('tr');
+    tr.className = 'border-b border-slate-200 dark:border-slate-800 align-top';
+
     DISPLAY_COLUMNS.forEach((col) => {
       const td = document.createElement('td');
+      td.className = 'px-4 py-3 text-sm';
       td.textContent = rowData[col] || '';
       tr.appendChild(td);
     });
 
     const remarkTd = document.createElement('td');
+    remarkTd.className = 'px-4 py-3';
     remarkTd.appendChild(buildRemarkCell(rowIndex));
     tr.appendChild(remarkTd);
     tableBody.appendChild(tr);
@@ -145,160 +137,9 @@ function isDynamicRemark(value) {
   return ['QC Trouble Spreader', 'DOOG Units', 'LOOG Units', 'D/L OOG Units'].includes(value);
 }
 
-function blockIsComplete(block) {
+function blockComplete(block) {
   if (!block?.value) return false;
-  if (!isDynamicRemark(block.value)) return true;
-  return /\d+/.test(String(block.extra || ''));
-}
-
-function buildRemarkCell(rowIndex) {
-  const row = resultRows[rowIndex];
-  const wrapper = document.createElement('div');
-  wrapper.className = 'remark-cell';
-
-  const list = document.createElement('div');
-  list.className = 'remark-list';
-
-  row.remarkBlocks.forEach((block, blockIndex) => {
-    if (block.kind === 'log') {
-      const logBlock = document.createElement('div');
-      logBlock.className = 'remark-block glass-subpanel';
-
-      const logChip = document.createElement('div');
-      logChip.className = 'log-chip';
-      logChip.textContent = block.text;
-
-      const actionWrap = document.createElement('div');
-      actionWrap.className = 'remark-inline-actions';
-
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'mini-btn';
-      removeBtn.type = 'button';
-      removeBtn.textContent = '✕';
-      removeBtn.title = 'Remove remark';
-      removeBtn.addEventListener('click', () => {
-        row.remarkBlocks.splice(blockIndex, 1);
-        renderTable();
-      });
-
-      actionWrap.appendChild(removeBtn);
-      logBlock.appendChild(logChip);
-      logBlock.appendChild(actionWrap);
-      list.appendChild(logBlock);
-      return;
-    }
-
-    const blockNode = remarkBlockTemplate.content.cloneNode(true);
-    const root = blockNode.querySelector('.remark-block');
-    const select = blockNode.querySelector('.remark-select');
-    const extraInput = blockNode.querySelector('.remark-extra');
-    const viewChip = blockNode.querySelector('.remark-view');
-    const editBtn = blockNode.querySelector('.edit-remark-btn');
-    const resetBtn = blockNode.querySelector('.reset-remark-btn');
-    const removeBtn = blockNode.querySelector('.remove-remark-btn');
-
-    select.value = block.value || '';
-
-    const dynamicMap = {
-      'QC Trouble Spreader': 'QC [801-808] Trouble Spreader',
-      'DOOG Units': 'DOOG [number] Units',
-      'LOOG Units': 'LOOG [number] Units',
-      'D/L OOG Units': 'D/L OOG [number] Units'
-    };
-
-    const syncViewMode = () => {
-      const complete = blockIsComplete(block);
-      if (complete && block.editing !== true) {
-        select.classList.add('hidden');
-        extraInput.classList.add('hidden');
-        viewChip.classList.remove('hidden');
-        viewChip.textContent = formatPresetBlock(block);
-        editBtn.classList.remove('hidden');
-        resetBtn.classList.remove('hidden');
-      } else {
-        select.classList.remove('hidden');
-        const showExtra = dynamicMap[select.value];
-        if (showExtra) {
-          extraInput.classList.remove('hidden');
-          extraInput.placeholder = dynamicMap[select.value];
-          extraInput.value = block.extra || '';
-        } else {
-          extraInput.classList.add('hidden');
-          extraInput.value = '';
-          block.extra = '';
-        }
-        viewChip.classList.add('hidden');
-        editBtn.classList.add('hidden');
-        resetBtn.classList.add('hidden');
-      }
-    };
-
-    select.addEventListener('change', () => {
-      block.value = select.value;
-      if (!isDynamicRemark(block.value) && block.value) block.editing = false;
-      syncViewMode();
-    });
-
-    extraInput.addEventListener('input', () => {
-      block.extra = extraInput.value;
-      if (blockIsComplete(block)) {
-        block.editing = false;
-      }
-      syncViewMode();
-    });
-
-    editBtn.addEventListener('click', () => {
-      block.editing = true;
-      syncViewMode();
-    });
-
-    resetBtn.addEventListener('click', () => {
-      block.value = '';
-      block.extra = '';
-      block.editing = true;
-      syncViewMode();
-    });
-
-    removeBtn.addEventListener('click', () => {
-      row.remarkBlocks.splice(blockIndex, 1);
-      renderTable();
-    });
-
-    root.dataset.index = String(blockIndex);
-    syncViewMode();
-    list.appendChild(blockNode);
-  });
-
-  const actions = document.createElement('div');
-  actions.className = 'remark-actions';
-
-  const addRemarkBtn = document.createElement('button');
-  addRemarkBtn.type = 'button';
-  addRemarkBtn.textContent = '(+) Add Remark';
-  addRemarkBtn.className = 'mini-btn';
-  addRemarkBtn.addEventListener('click', () => {
-    row.remarkBlocks.push({ kind: 'preset', value: '', extra: '', editing: true });
-    renderTable();
-  });
-
-  const pasteLogBtn = document.createElement('button');
-  pasteLogBtn.type = 'button';
-  pasteLogBtn.className = 'icon-btn';
-  pasteLogBtn.title = 'Paste log';
-  pasteLogBtn.textContent = '📋';
-  pasteLogBtn.addEventListener('click', () => {
-    activeRemarkRowIndex = rowIndex;
-    logTextarea.value = '';
-    modalBackdrop.classList.remove('hidden');
-    modalBackdrop.setAttribute('aria-hidden', 'false');
-  });
-
-  actions.appendChild(addRemarkBtn);
-  actions.appendChild(pasteLogBtn);
-
-  wrapper.appendChild(list);
-  wrapper.appendChild(actions);
-  return wrapper;
+  return isDynamicRemark(block.value) ? /\d+/.test(String(block.extra || '')) : true;
 }
 
 function formatPresetBlock(block) {
@@ -315,9 +156,137 @@ function formatPresetBlock(block) {
   return block.value;
 }
 
+function buildRemarkCell(rowIndex) {
+  const row = resultRows[rowIndex];
+  const container = document.createElement('div');
+  container.className = 'space-y-2 min-w-[320px]';
+
+  const list = document.createElement('div');
+  list.className = 'space-y-2';
+
+  row.remarkBlocks.forEach((block, blockIndex) => {
+    if (block.kind === 'log') {
+      const wrap = document.createElement('div');
+      wrap.className = 'rounded-xl border border-primary/30 bg-primary/10 p-2 text-xs flex items-start justify-between gap-2';
+      const text = document.createElement('div');
+      text.className = 'whitespace-pre-wrap';
+      text.textContent = block.text;
+      const remove = document.createElement('button');
+      remove.className = 'h-7 w-7 rounded bg-slate-200 dark:bg-slate-700';
+      remove.textContent = '✕';
+      remove.addEventListener('click', () => {
+        row.remarkBlocks.splice(blockIndex, 1);
+        renderTable();
+      });
+      wrap.append(text, remove);
+      list.appendChild(wrap);
+      return;
+    }
+
+    const node = remarkBlockTemplate.content.cloneNode(true);
+    const select = node.querySelector('.remark-select');
+    const extraInput = node.querySelector('.remark-extra');
+    const chip = node.querySelector('.remark-chip');
+    const editBtn = node.querySelector('.edit-remark-btn');
+    const resetBtn = node.querySelector('.reset-remark-btn');
+    const removeBtn = node.querySelector('.remove-remark-btn');
+
+    const dynamicMap = {
+      'QC Trouble Spreader': 'QC [801-808] Trouble Spreader',
+      'DOOG Units': 'DOOG [number] Units',
+      'LOOG Units': 'LOOG [number] Units',
+      'D/L OOG Units': 'D/L OOG [number] Units'
+    };
+
+    select.value = block.value || '';
+    extraInput.value = block.extra || '';
+
+    const updateMode = () => {
+      const done = blockComplete(block) && !block.editing;
+      if (done) {
+        select.classList.add('hidden');
+        extraInput.classList.add('hidden');
+        chip.classList.remove('hidden');
+        chip.textContent = formatPresetBlock(block);
+        editBtn.classList.remove('hidden');
+        resetBtn.classList.remove('hidden');
+      } else {
+        select.classList.remove('hidden');
+        if (dynamicMap[block.value]) {
+          extraInput.classList.remove('hidden');
+          extraInput.placeholder = dynamicMap[block.value];
+        } else {
+          extraInput.classList.add('hidden');
+        }
+        chip.classList.add('hidden');
+        editBtn.classList.add('hidden');
+        resetBtn.classList.add('hidden');
+      }
+    };
+
+    select.addEventListener('change', () => {
+      block.value = select.value;
+      if (!isDynamicRemark(block.value)) block.extra = '';
+      block.editing = isDynamicRemark(block.value);
+      updateMode();
+    });
+
+    extraInput.addEventListener('input', () => {
+      block.extra = extraInput.value;
+      if (blockComplete(block)) block.editing = false;
+      updateMode();
+    });
+
+    editBtn.addEventListener('click', () => {
+      block.editing = true;
+      updateMode();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      block.value = '';
+      block.extra = '';
+      block.editing = true;
+      updateMode();
+    });
+
+    removeBtn.addEventListener('click', () => {
+      row.remarkBlocks.splice(blockIndex, 1);
+      renderTable();
+    });
+
+    updateMode();
+    list.appendChild(node);
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'flex gap-2';
+
+  const addRemarkBtn = document.createElement('button');
+  addRemarkBtn.className = 'h-8 px-3 rounded bg-slate-100 dark:bg-slate-700 text-xs';
+  addRemarkBtn.type = 'button';
+  addRemarkBtn.textContent = '(+) Add Remark';
+  addRemarkBtn.addEventListener('click', () => {
+    row.remarkBlocks.push({ kind: 'preset', value: '', extra: '', editing: true });
+    renderTable();
+  });
+
+  const pasteLogBtn = document.createElement('button');
+  pasteLogBtn.className = 'h-8 px-3 rounded bg-slate-100 dark:bg-slate-700 text-xs';
+  pasteLogBtn.type = 'button';
+  pasteLogBtn.textContent = '📋 Paste Log';
+  pasteLogBtn.addEventListener('click', () => {
+    activeRemarkRowIndex = rowIndex;
+    logTextarea.value = '';
+    modalBackdrop.classList.remove('hidden');
+  });
+
+  actions.append(addRemarkBtn, pasteLogBtn);
+  container.append(list, actions);
+  return container;
+}
+
 function closeModal() {
   modalBackdrop.classList.add('hidden');
-  modalBackdrop.setAttribute('aria-hidden', 'true');
 }
 
 function applyLogParse() {
@@ -328,38 +297,11 @@ function applyLogParse() {
   renderTable();
 }
 
-function parseOperationalLog(text) {
-  const gangWayTime = extractTime(
-    text,
-    /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Gang\s*Way\s*Down/i,
-    /Gang\s*Way\s*Down[^\n]*(\d{1,2}:\d{2})/i
-  );
-  const quarantineTime = extractTime(
-    text,
-    /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Quarantine\s*Clearance/i,
-    /Quarantine\s*Clearance[^\n]*(\d{1,2}:\d{2})/i
-  );
-  const commenceTime = extractTime(
-    text,
-    /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Commence(?:\s+Loading|\s+Discharge|\b)/i,
-    /Commence(?:\s+Loading|\s+Discharge|\b)[^\n]*(\d{1,2}:\d{2})/i
-  );
-
-  const gw = gangWayTime || 'N/A';
-  const qt = quarantineTime || 'N/A';
-  const cm = commenceTime || 'N/A';
-  const tkbmTime = quarantineTime ? addRandomMinutes(quarantineTime, 3, 7) : 'N/A';
-  const breaks = detectMealBreaks(gangWayTime, commenceTime);
-  const breakText = breaks.length ? `${breaks.join(', ')}, ` : '';
-
-  return `Gang way ready ${gw}, ${breakText}Quarantine ${qt}, TKBM ${tkbmTime}, Start Ops ${cm}`;
-}
-
-function extractTime(text, primaryRegex, fallbackRegex) {
-  const primary = text.match(primaryRegex);
-  if (primary?.[1]) return toHHMM(primary[1]);
-  const fallback = text.match(fallbackRegex);
-  if (fallback?.[1]) return toHHMM(fallback[1]);
+function extractTime(text, regexA, regexB) {
+  const a = text.match(regexA);
+  if (a?.[1]) return toHHMM(a[1]);
+  const b = text.match(regexB);
+  if (b?.[1]) return toHHMM(b[1]);
   return '';
 }
 
@@ -369,6 +311,18 @@ function toHHMM(raw) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+function parseOperationalLog(text) {
+  const gangWayTime = extractTime(text, /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Gang\s*Way\s*Down/i, /Gang\s*Way\s*Down[^\n]*(\d{1,2}:\d{2})/i);
+  const quarantineTime = extractTime(text, /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Quarantine\s*Clearance/i, /Quarantine\s*Clearance[^\n]*(\d{1,2}:\d{2})/i);
+  const commenceTime = extractTime(text, /(?:^|\n|\b)(\d{1,2}:\d{2})[^\n]*Commence(?:\s+Loading|\s+Discharge|\b)/i, /Commence(?:\s+Loading|\s+Discharge|\b)[^\n]*(\d{1,2}:\d{2})/i);
+
+  const tkbmTime = quarantineTime ? addRandomMinutes(quarantineTime, 3, 7) : 'N/A';
+  const breaks = detectMealBreaks(gangWayTime, commenceTime);
+  const breakText = breaks.length ? `${breaks.join(', ')}, ` : '';
+
+  return `Gang way ready ${gangWayTime || 'N/A'}, ${breakText}Quarantine ${quarantineTime || 'N/A'}, TKBM ${tkbmTime}, Start Ops ${commenceTime || 'N/A'}`;
+}
+
 function parseMinutes(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
@@ -376,9 +330,9 @@ function parseMinutes(hhmm) {
 
 function addRandomMinutes(hhmm, min, max) {
   const base = parseMinutes(hhmm);
-  const randomIncrement = Math.floor(Math.random() * (max - min + 1)) + min;
-  const total = (base + randomIncrement) % (24 * 60);
-  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  const add = Math.floor(Math.random() * (max - min + 1)) + min;
+  const t = (base + add) % (24 * 60);
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
 
 function detectMealBreaks(gangWayTime, commenceTime) {
@@ -386,57 +340,37 @@ function detectMealBreaks(gangWayTime, commenceTime) {
   const start = parseMinutes(gangWayTime);
   let end = parseMinutes(commenceTime);
   if (end < start) end += 24 * 60;
-
   const windows = [
-    { from: 11 * 60 + 30, to: 13 * 60, label: 'Meal Break S1' },
-    { from: 17 * 60 + 30, to: 19 * 60, label: 'Meal Break S2' },
-    { from: 3 * 60 + 30, to: 5 * 60, label: 'Meal Break S3' }
+    { from: 690, to: 780, label: 'Meal Break S1' },
+    { from: 1050, to: 1140, label: 'Meal Break S2' },
+    { from: 210, to: 300, label: 'Meal Break S3' }
   ];
-
-  return windows
-    .filter((w) => {
-      const a = w.from < start ? w.from + 24 * 60 : w.from;
-      const b = w.to < start ? w.to + 24 * 60 : w.to;
-      return Math.max(start, a) <= Math.min(end, b);
-    })
-    .map((w) => w.label);
+  return windows.filter((w) => {
+    const a = w.from < start ? w.from + 1440 : w.from;
+    const b = w.to < start ? w.to + 1440 : w.to;
+    return Math.max(start, a) <= Math.min(end, b);
+  }).map((w) => w.label);
 }
 
 function getJoinedRemarks(row) {
-  return row.remarkBlocks
-    .map((block) => (block.kind === 'log' ? block.text : formatPresetBlock(block)))
-    .filter(Boolean)
-    .join('\n');
-}
-
-async function copyTableToExcel() {
-  const table = document.getElementById('resultTable');
-  if (!table || !resultRows.length) return;
-
-  const headers = [...DISPLAY_COLUMNS, 'Remark'];
-  const lines = [headers.join('\t')];
-  resultRows.forEach((row) => {
-    const rowValues = DISPLAY_COLUMNS.map((col) => sanitizeTSV(row[col] || ''));
-    rowValues.push(sanitizeTSV(getJoinedRemarks(row)));
-    lines.push(rowValues.join('\t'));
-  });
-
-  try {
-    await navigator.clipboard.writeText(lines.join('\n'));
-    copyTableBtn.textContent = '✅ Copied';
-    setTimeout(() => {
-      copyTableBtn.textContent = '📋 Copy Table';
-    }, 1200);
-  } catch {
-    copyTableBtn.textContent = '⚠️ Clipboard blocked';
-    setTimeout(() => {
-      copyTableBtn.textContent = '📋 Copy Table';
-    }, 1500);
-  }
+  return row.remarkBlocks.map((block) => (block.kind === 'log' ? block.text : formatPresetBlock(block))).filter(Boolean).join('\n');
 }
 
 function sanitizeTSV(value) {
   return String(value).replace(/\t/g, ' ').replace(/\r/g, '');
+}
+
+async function copyTableToExcel() {
+  if (!resultRows.length) return;
+  const rows = [[...DISPLAY_COLUMNS, 'Remark'].join('\t')];
+  resultRows.forEach((row) => {
+    const vals = DISPLAY_COLUMNS.map((c) => sanitizeTSV(row[c] || ''));
+    vals.push(sanitizeTSV(getJoinedRemarks(row)));
+    rows.push(vals.join('\t'));
+  });
+  await navigator.clipboard.writeText(rows.join('\n'));
+  copyTableBtn.textContent = '✅ Copied';
+  setTimeout(() => (copyTableBtn.textContent = '📋 Copy Table'), 1200);
 }
 
 function exportFilteredData() {
@@ -444,7 +378,6 @@ function exportFilteredData() {
     ...Object.fromEntries(DISPLAY_COLUMNS.map((c) => [c, row[c] || ''])),
     Remark: getJoinedRemarks(row)
   }));
-
   const ws = XLSX.utils.json_to_sheet(exportData);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Filtered Data');
@@ -454,7 +387,6 @@ function exportFilteredData() {
 function handleImageUpload(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-
   const reader = new FileReader();
   reader.onload = () => {
     const img = new Image();
@@ -474,82 +406,108 @@ function handleImageUpload(event) {
 function processBerthImage() {
   if (!loadedImage) return;
   ctx.drawImage(loadedImage, 0, 0);
+  const w = berthCanvas.width;
+  const h = berthCanvas.height;
+  const leftKeep = Math.max(Math.round(w * 0.12), 110);
 
-  const width = berthCanvas.width;
-  const height = berthCanvas.height;
-  const leftKeepWidth = Math.max(Math.round(width * 0.12), 110);
-  const sourceData = ctx.getImageData(0, 0, width, height);
-  const data = sourceData.data;
+  const source = ctx.getImageData(0, 0, w, h);
+  const src = source.data;
 
   const target = { r: 145, g: 230, b: 245 };
-  const tolerance = 78;
-  const targetMask = new Uint8Array(width * height);
+  const tolerance = 72;
+  const mask = new Uint8Array(w * h);
 
-  for (let y = 0; y < height; y++) {
-    for (let x = leftKeepWidth; x < width; x++) {
-      const idx = y * width + x;
+  for (let y = 0; y < h; y++) {
+    for (let x = leftKeep; x < w; x++) {
+      const idx = y * w + x;
       const i = idx * 4;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const a = data[i + 3];
-      if (a === 0) continue;
-
-      const dist = Math.sqrt((r - target.r) ** 2 + (g - target.g) ** 2 + (b - target.b) ** 2);
-      if (dist <= tolerance) targetMask[idx] = 1;
+      const r = src[i], g = src[i + 1], b = src[i + 2], a = src[i + 3];
+      if (!a) continue;
+      const dist = Math.hypot(r - target.r, g - target.g, b - target.b);
+      if (dist <= tolerance) mask[idx] = 1;
     }
   }
 
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(leftKeepWidth, 0, width - leftKeepWidth, height);
+  const output = ctx.createImageData(w, h);
+  const out = output.data;
 
-  const visited = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    for (let x = leftKeepWidth; x < width; x++) {
-      const seed = y * width + x;
-      if (!targetMask[seed] || visited[seed]) continue;
+  // Preserve full left-axis labels exactly.
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < leftKeep; x++) {
+      const idx = y * w + x;
+      const i = idx * 4;
+      out[i] = src[i]; out[i + 1] = src[i + 1]; out[i + 2] = src[i + 2]; out[i + 3] = src[i + 3];
+    }
+  }
 
-      const queue = [seed];
+  // Right area default clean background (fully filtered).
+  for (let y = 0; y < h; y++) {
+    for (let x = leftKeep; x < w; x++) {
+      const idx = y * w + x;
+      const i = idx * 4;
+      out[i] = 255; out[i + 1] = 255; out[i + 2] = 255; out[i + 3] = 255;
+    }
+  }
+
+  // Restore only valid light-blue clusters + nearby text pixels.
+  const visited = new Uint8Array(w * h);
+  const n4 = [1, -1, w, -w];
+  for (let y = 0; y < h; y++) {
+    for (let x = leftKeep; x < w; x++) {
+      const seed = y * w + x;
+      if (!mask[seed] || visited[seed]) continue;
+
+      const q = [seed];
       visited[seed] = 1;
       let head = 0;
-      let minX = x;
-      let maxX = x;
-      let minY = y;
-      let maxY = y;
-      let count = 0;
+      let minX = x, maxX = x, minY = y, maxY = y, count = 0;
 
-      while (head < queue.length) {
-        const current = queue[head++];
-        const cx = current % width;
-        const cy = Math.floor(current / width);
-        count += 1;
-
+      while (head < q.length) {
+        const cur = q[head++];
+        const cx = cur % w;
+        const cy = Math.floor(cur / w);
+        count++;
         if (cx < minX) minX = cx;
         if (cx > maxX) maxX = cx;
         if (cy < minY) minY = cy;
         if (cy > maxY) maxY = cy;
 
-        const neighbors = [current - 1, current + 1, current - width, current + width];
-        neighbors.forEach((n) => {
-          if (n < 0 || n >= width * height) return;
-          const nx = n % width;
-          const ny = Math.floor(n / width);
-          if (nx < leftKeepWidth || ny < 0 || ny >= height) return;
-          if (!targetMask[n] || visited[n]) return;
+        for (const d of n4) {
+          const n = cur + d;
+          if (n < 0 || n >= w * h || visited[n] || !mask[n]) continue;
+          const nx = n % w;
+          const ny = Math.floor(n / w);
+          if (nx < leftKeep || ny < 0 || ny >= h) continue;
           visited[n] = 1;
-          queue.push(n);
-        });
+          q.push(n);
+        }
       }
 
-      if (count < 60) continue;
       const boxW = maxX - minX + 1;
       const boxH = maxY - minY + 1;
-      if (boxW < 8 || boxH < 8) continue;
+      const area = boxW * boxH;
+      const density = count / Math.max(area, 1);
 
-      ctx.putImageData(sourceData, 0, 0, minX, minY, boxW, boxH);
+      // Skip giant sparse regions that can leak unrelated white boxes.
+      if (count < 80 || boxW < 10 || boxH < 10 || density < 0.09 || boxW > w * 0.45 || boxH > h * 0.45) continue;
+
+      const pad = 2;
+      const sx = Math.max(leftKeep, minX - pad);
+      const ex = Math.min(w - 1, maxX + pad);
+      const sy = Math.max(0, minY - pad);
+      const ey = Math.min(h - 1, maxY + pad);
+
+      for (let yy = sy; yy <= ey; yy++) {
+        for (let xx = sx; xx <= ex; xx++) {
+          const idx = yy * w + xx;
+          const i = idx * 4;
+          out[i] = src[i]; out[i + 1] = src[i + 1]; out[i + 2] = src[i + 2]; out[i + 3] = src[i + 3];
+        }
+      }
     }
   }
 
+  ctx.putImageData(output, 0, 0);
   downloadImageBtn.disabled = false;
 }
 

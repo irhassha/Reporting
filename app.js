@@ -3,6 +3,9 @@ const copyTableBtn = document.getElementById('copyTableBtn');
 const exportExcelBtn = document.getElementById('exportExcelBtn');
 const tableBody = document.getElementById('tableBody');
 const remarkBlockTemplate = document.getElementById('remarkBlockTemplate');
+const dateRangePicker = document.getElementById('dateRangePicker');
+const dateRangeReset = document.getElementById('dateRangeReset');
+const dateRangeStatus = document.getElementById('dateRangeStatus');
 
 const modalBackdrop = document.getElementById('modalBackdrop');
 const closeModalBtn = document.getElementById('closeModalBtn');
@@ -29,6 +32,9 @@ let activeRemarkRowIndex = null;
 let loadedImage = null;
 let performanceChart = null;
 let averageChart = null;
+let selectedCalendarDates = [];
+let dateRangeStart = null;
+let dateRangeEnd = null;
 
 const DISPLAY_COLUMNS = [
   'Vessel Name', 'Service', 'ATB', 'ATD', 'Total (Boxes)', 'Total Teus', 'Crane Intencity (CI)', 'Vessel Rate (VR)', 'ATB to Fst lift', 'Lst lift to ATD'
@@ -85,6 +91,8 @@ filterOpacityInput.addEventListener('input', () => {
 });
 metricSelect?.addEventListener('change', renderAnalyticsCharts);
 groupBySelect?.addEventListener('change', renderAnalyticsCharts);
+dateRangePicker?.addEventListener('change', onCalendarDatePicked);
+dateRangeReset?.addEventListener('click', resetDateRangeFilter);
 
 function normalizeHeader(header) {
   return String(header || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -121,6 +129,7 @@ function createRowFromSource(sourceRow) {
   row['Window Status'] = toDisplayText(sourceRow['Window Status'] || sourceRow.Window || sourceRow['VS Window'] || '');
   row['BOA Status'] = toDisplayText(sourceRow['BOA Status'] || sourceRow.BOA || '');
   row['MM-YY'] = toDisplayText(sourceRow['MM-YY'] || sourceRow.MMYY || sourceRow.Month || '');
+  row._filterDate = extractRowFilterDate(sourceRow);
   row.remarkBlocks = [];
   return row;
 }
@@ -128,6 +137,62 @@ function createRowFromSource(sourceRow) {
 function operatorAllowed(sourceRow) {
   const op = toDisplayText(findValueByAlias(sourceRow, columnAliasMap.Operator || ['Operator'])).trim().toUpperCase();
   return op === 'MCC' || op === 'MAE';
+}
+
+function toISODateOnly(dateObj) {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return '';
+  return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+}
+
+function extractRowFilterDate(sourceRow) {
+  const atbRaw = findValueByAlias(sourceRow, columnAliasMap.ATB || ['ATB']);
+  const atdRaw = findValueByAlias(sourceRow, columnAliasMap.ATD || ['ATD']);
+  const atb = toDateValue(atbRaw);
+  const atd = toDateValue(atdRaw);
+  return toISODateOnly(atb || atd);
+}
+
+function onCalendarDatePicked(event) {
+  const picked = String(event.target.value || '');
+  if (!picked) return;
+
+  selectedCalendarDates.push(picked);
+  if (selectedCalendarDates.length > 2) selectedCalendarDates = [picked];
+
+  if (selectedCalendarDates.length === 1) {
+    dateRangeStart = picked;
+    dateRangeEnd = null;
+    if (dateRangeStatus) dateRangeStatus.textContent = `Tanggal awal: ${picked}. Pilih tanggal kedua.`;
+  } else {
+    const [a, b] = selectedCalendarDates;
+    dateRangeStart = a <= b ? a : b;
+    dateRangeEnd = a <= b ? b : a;
+    if (dateRangeStatus) dateRangeStatus.textContent = `Range: ${dateRangeStart} s/d ${dateRangeEnd}`;
+  }
+
+  renderTable();
+}
+
+function resetDateRangeFilter() {
+  selectedCalendarDates = [];
+  dateRangeStart = null;
+  dateRangeEnd = null;
+  if (dateRangePicker) dateRangePicker.value = '';
+  if (dateRangeStatus) dateRangeStatus.textContent = 'Semua tanggal';
+  renderTable();
+}
+
+function rowPassesDateRange(row) {
+  if (!dateRangeStart) return true;
+  if (!row?._filterDate) return false;
+  if (!dateRangeEnd) return row._filterDate === dateRangeStart;
+  return row._filterDate >= dateRangeStart && row._filterDate <= dateRangeEnd;
+}
+
+function getFilteredRowsWithIndex() {
+  return resultRows
+    .map((row, rowIndex) => ({ row, rowIndex }))
+    .filter(({ row }) => rowPassesDateRange(row));
 }
 
 async function handleExcelUpload(event) {
@@ -148,7 +213,7 @@ async function handleExcelUpload(event) {
     analyticsRows.push(src);
   });
 
-  renderTable();
+  resetDateRangeFilter();
   renderServiceFilters();
   renderAnalyticsCharts();
   const ready = resultRows.length > 0;
@@ -163,7 +228,13 @@ function renderTable() {
     return;
   }
 
-  resultRows.forEach((rowData, rowIndex) => {
+  const filteredRows = getFilteredRowsWithIndex();
+  if (!filteredRows.length) {
+    tableBody.innerHTML = '<tr><td class="px-4 py-6 text-center text-slate-500" colspan="11">No rows match selected calendar range.</td></tr>';
+    return;
+  }
+
+  filteredRows.forEach(({ row: rowData, rowIndex }) => {
     const tr = document.createElement('tr');
     tr.className = 'border-b border-slate-200 dark:border-slate-800 align-top';
 
@@ -412,9 +483,10 @@ function escapeTSVCell(value) {
 }
 
 async function copyTableToExcel() {
-  if (!resultRows.length) return;
+  const filteredRows = getFilteredRowsWithIndex().map((item) => item.row);
+  if (!filteredRows.length) return;
   const rows = [[...DISPLAY_COLUMNS, 'Remark'].map(escapeTSVCell).join('\t')];
-  resultRows.forEach((row) => {
+  filteredRows.forEach((row) => {
     const vals = DISPLAY_COLUMNS.map((c) => escapeTSVCell(row[c] || ''));
     vals.push(escapeTSVCell(getJoinedRemarks(row)));
     rows.push(vals.join('\t'));
@@ -425,7 +497,7 @@ async function copyTableToExcel() {
 }
 
 function exportFilteredData() {
-  const exportData = resultRows.map((row) => ({
+  const exportData = getFilteredRowsWithIndex().map(({ row }) => ({
     ...Object.fromEntries(DISPLAY_COLUMNS.map((c) => [c, row[c] || ''])),
     Operator: row.Operator || '',
     'MM-YY': row['MM-YY'] || '',

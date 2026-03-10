@@ -81,6 +81,12 @@
               </label>
               <button id="copyTableBtn" class="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm font-semibold" disabled type="button">📋 Copy Table</button>
               <button id="exportExcelBtn" class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold" disabled type="button">Export to Excel</button>
+              <div class="ml-auto flex flex-wrap items-center gap-2">
+                <label class="text-xs text-slate-500 dark:text-slate-400" for="dateRangePicker">Filter Calendar (pilih 2x tanggal)</label>
+                <input id="dateRangePicker" class="rounded-lg bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-sm" type="date" />
+                <button id="dateRangeReset" class="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold" type="button">Reset Range</button>
+                <span id="dateRangeStatus" class="text-xs text-slate-500 dark:text-slate-400">Semua tanggal</span>
+              </div>
             </div>
 
             <div class="overflow-x-auto">

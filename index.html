@@ -13,6 +13,8 @@
       rel="stylesheet"
     />
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
     <script id="tailwind-config">
       tailwind.config = {
         darkMode: 'class',
@@ -48,6 +50,12 @@
       </header>
 
       <main class="flex-1 w-full max-w-7xl mx-auto px-3 md:px-6 py-8 space-y-8">
+        <nav class="glass-panel rounded-2xl px-4 py-3 flex flex-wrap gap-2 text-sm">
+          <a class="px-3 py-1 rounded-lg bg-slate-200/20 hover:bg-slate-200/30" href="#tool-excel">Tool 1</a>
+          <a class="px-3 py-1 rounded-lg bg-slate-200/20 hover:bg-slate-200/30" href="#tool-image">Tool 2</a>
+          <a class="px-3 py-1 rounded-lg bg-slate-200/20 hover:bg-slate-200/30" href="#tool-analytics">Tool 3: Analytics</a>
+        </nav>
+
         <section class="relative rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 min-h-[240px] flex items-center">
           <div class="absolute inset-0 opacity-40" style="background-image: linear-gradient(45deg, #0b50da 0%, transparent 100%)"></div>
           <div class="relative z-10 px-5 md:px-8 max-w-3xl">
@@ -112,6 +120,51 @@
               <span id="filterOpacityValue" class="text-sm font-semibold text-slate-600 dark:text-slate-300">80%</span>
             </div>
             <canvas id="berthCanvas" class="w-full max-h-[620px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white"></canvas>
+          </div>
+        </section>
+
+        <section class="space-y-4" id="tool-analytics">
+          <div>
+            <h2 class="text-2xl font-bold">Tool 3: Performance Analytics</h2>
+            <p class="text-slate-500 dark:text-slate-400">Dynamic chart builder for Window/BOA and operational performance metrics.</p>
+          </div>
+
+          <div class="glass-panel rounded-2xl p-4 md:p-6 border border-slate-700/80">
+            <div class="flex flex-col lg:flex-row gap-4">
+              <aside class="lg:w-1/4 rounded-xl border border-slate-700 bg-slate-900/50 p-4 space-y-4">
+                <h3 class="font-semibold">Chart Builder Controls</h3>
+                <div class="space-y-2">
+                  <label class="text-sm text-slate-300" for="metricSelect">Select Metric (Y-Axis)</label>
+                  <select id="metricSelect" class="w-full rounded-lg bg-slate-900 border-slate-700 text-sm">
+                    <option value="window">Window Performance (%)</option>
+                    <option value="boa">BOA Performance (%)</option>
+                    <option value="vr">Average Vessel Rate</option>
+                    <option value="ci">Average CI</option>
+                  </select>
+                </div>
+                <div class="space-y-2">
+                  <label class="text-sm text-slate-300" for="groupBySelect">Group By (X-Axis)</label>
+                  <select id="groupBySelect" class="w-full rounded-lg bg-slate-900 border-slate-700 text-sm">
+                    <option value="month">By Month</option>
+                    <option value="service">By Service</option>
+                    <option value="operator">By Operator</option>
+                  </select>
+                </div>
+                <div class="space-y-2">
+                  <label class="text-sm text-slate-300">Filter Service</label>
+                  <div id="serviceFilterList" class="max-h-52 overflow-auto rounded-lg border border-slate-700 p-2 space-y-1 text-sm"></div>
+                </div>
+              </aside>
+
+              <div class="lg:w-3/4 grid grid-cols-1 xl:grid-cols-4 gap-4">
+                <div class="xl:col-span-3 rounded-xl border border-slate-700 bg-slate-900/50 p-3 min-h-[360px]">
+                  <canvas id="performanceChart"></canvas>
+                </div>
+                <div class="xl:col-span-1 rounded-xl border border-slate-700 bg-slate-900/50 p-3 min-h-[360px]">
+                  <canvas id="averageChart"></canvas>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
